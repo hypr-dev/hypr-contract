@@ -1,0 +1,14 @@
+.backup/
+.vscode/
+build/
+deployments/
+dist/
+node_modules/
+.env.mainnet
+.env.testnet
+.ideas
+.DS_Store
+secrets.json
+coverage.json
+package-lock.json
+tenderly.yaml

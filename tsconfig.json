@@ -1,0 +1,29 @@
+{
+	"compilerOptions": {
+		"target": "es5",
+		"module": "commonjs",
+		"strict": true,
+		"esModuleInterop": true,
+		"outDir": "dist",
+		"resolveJsonModule": true,
+		"typeRoots": [
+			"./node_modules/@types",
+			"./@types"
+		],
+	},
+	"files": [
+		"./constants.ts",
+		"./hardhat.config.ts"
+	],
+	"include": [
+		"./@types",
+		"./deploy",
+		"./scripts",
+		"./test",
+		"./types",
+		"./utils"
+	],
+	"exclude": [
+		"node_modules"
+	]
+}

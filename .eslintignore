@@ -1,0 +1,8 @@
+.backup/
+.github/
+.vscode/
+node_modules/
+@types/
+build/
+deployments/
+dist/
