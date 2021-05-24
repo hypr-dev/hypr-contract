@@ -7,6 +7,7 @@ import "../libs/interfaces/IBEP20.sol";
 import "../libs/interfaces/IFarm.sol";
 import "../libs/interfaces/IRouter.sol";
 import "../libs/SafeBEP20.sol";
+import "./interfaces/IConverterCadet.sol";
 import "./StrategyCaptain.sol";
 
 contract CompCommander is StrategyCaptain {
@@ -409,6 +410,10 @@ contract CompCommander is StrategyCaptain {
 				buyBackAdrs,
 				block.timestamp.add(600)
 			);
+		}
+
+		if (isConverting) {
+			IConverterCadet(buyBackAdrs).convert();
 		}
 
 		return earnedAmt.sub(buyBackAmt);
