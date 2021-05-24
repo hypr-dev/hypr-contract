@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.7.6;
+pragma solidity >=0.6.0 <0.8.0;
 
 import "../../libs/interfaces/IBEP20.sol";
 
@@ -33,8 +33,8 @@ interface IStrategy {
 
 	function inCaseTokensGetStuck(
 		address token,
-		uint256 amount,
-		address to
+		address to,
+		uint256 amount
 	) external;
 
 	// In case new vaults require functions without a timelock as well, hoping to avoid having multiple timelock contracts

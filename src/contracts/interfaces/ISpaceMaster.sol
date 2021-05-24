@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.7.6;
+pragma solidity >=0.6.0 <0.8.0;
 
 import "../../libs/interfaces/IBEP20.sol";
 import "./IStrategy.sol";
 
 interface ISpaceMaster {
 	function add(
-		address want,
-		address strategy,
+		address wantAdrs,
+		address strategyAdrs,
 		uint256 allocPoint,
 		uint16 depositFeeBP,
 		bool withUpdate

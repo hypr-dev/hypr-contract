@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 
 pragma experimental ABIEncoderV2;
-pragma solidity 0.7.6;
+pragma solidity >=0.6.0 <0.8.0;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
-import "../libs/SafeBEP20.sol";
 import "../libs/interfaces/IBEP20.sol";
+import "../libs/SafeBEP20.sol";
 import "./interfaces/ISpaceMaster.sol";
 import "./interfaces/IStrategy.sol";
 
@@ -47,8 +47,8 @@ contract TimelockController is AccessControl {
 		uint256 indexed index,
 		uint256 pid,
 		uint256 allocPoint,
-		bool withUpdate,
 		uint16 depositFeeBP,
+		bool withUpdate,
 		bytes32 predecessor,
 		uint256 delay
 	);
@@ -72,15 +72,6 @@ contract TimelockController is AccessControl {
 	event MinDelayChange(uint256 oldDuration, uint256 newDuration);
 	event MinDelayReducedChange(uint256 oldDuration, uint256 newDuration);
 	event DevWalletAddressChange(address devWalletAdrs);
-	event SetScheduled(
-		bytes32 indexed id,
-		uint256 indexed index,
-		address target,
-		uint256 value,
-		bytes data,
-		bytes32 predecessor,
-		uint256 delay
-	);
 
 	/**
 	 * @dev Initializes the contract with a given `minDelay`.
@@ -413,8 +404,8 @@ contract TimelockController is AccessControl {
 		address masterAdrs,
 		uint256 pid,
 		uint256 allocPoint,
-		bool withUpdate,
 		uint16 depositFeeBP,
+		bool withUpdate,
 		bytes32 predecessor,
 		bytes32 salt
 	) public onlyRole(EXECUTOR_ROLE) {
@@ -424,8 +415,8 @@ contract TimelockController is AccessControl {
 					masterAdrs,
 					pid,
 					allocPoint,
-					withUpdate,
 					depositFeeBP,
+					withUpdate,
 					predecessor,
 					salt
 				)
@@ -443,8 +434,8 @@ contract TimelockController is AccessControl {
 			0,
 			pid,
 			allocPoint,
-			withUpdate,
 			depositFeeBP,
+			withUpdate,
 			predecessor,
 			_minDelayReduced
 		);
@@ -454,8 +445,8 @@ contract TimelockController is AccessControl {
 		address masterAdrs,
 		uint256 pid,
 		uint256 allocPoint,
-		bool withUpdate,
 		uint16 depositFeeBP,
+		bool withUpdate,
 		bytes32 predecessor,
 		bytes32 salt
 	) public payable onlyRole(EXECUTOR_ROLE) {
@@ -465,8 +456,8 @@ contract TimelockController is AccessControl {
 					masterAdrs,
 					pid,
 					allocPoint,
-					withUpdate,
 					depositFeeBP,
+					withUpdate,
 					predecessor,
 					salt
 				)
@@ -503,14 +494,14 @@ contract TimelockController is AccessControl {
 
 	function add(
 		address masterAdrs,
-		address want,
-		address strategy,
+		address wantAdrs,
+		address strategyAdrs,
 		uint16 depositFeeBP,
 		bool withUpdate
 	) public onlyRole(EXECUTOR_ROLE) {
 		ISpaceMaster(masterAdrs).add(
-			want,
-			strategy,
+			wantAdrs,
+			strategyAdrs,
 			0,
 			depositFeeBP,
 			withUpdate

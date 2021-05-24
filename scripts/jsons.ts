@@ -1,5 +1,9 @@
 import fs from "fs";
-import { DEFAULT_FILENAME_PAIRS, DEFAULT_FILENAME_FARMS } from "../constants";
+import {
+	DEFAULT_FILENAME_PAIRS,
+	DEFAULT_FILENAME_FARMS,
+	DEFAULT_FILENAME_COMPS
+} from "../constants";
 
 function main(): Promise<void> {
 	if (
@@ -19,6 +23,16 @@ function main(): Promise<void> {
 	)
 		fs.writeFileSync(
 			`./dist/${process.env.FILENAME_FARMS ?? DEFAULT_FILENAME_FARMS}`,
+			"{}"
+		);
+
+	if (
+		!fs.existsSync(
+			`./dist/${process.env.FILENAME_COMPS ?? DEFAULT_FILENAME_COMPS}`
+		)
+	)
+		fs.writeFileSync(
+			`./dist/${process.env.FILENAME_COMPS ?? DEFAULT_FILENAME_COMPS}`,
 			"{}"
 		);
 

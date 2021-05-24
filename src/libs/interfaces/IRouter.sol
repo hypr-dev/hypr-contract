@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.7.6;
+pragma solidity >=0.6.0 <0.8.0;
 
-interface IPancakeRouter01 {
+interface IRouter {
 	function factory() external pure returns (address);
 
 	// solhint-disable-next-line func-name-mixedcase
@@ -87,6 +87,28 @@ interface IPancakeRouter01 {
 		bytes32 s
 	) external returns (uint256 amountToken, uint256 amountETH);
 
+	function removeLiquidityETHSupportingFeeOnTransferTokens(
+		address token,
+		uint256 liquidity,
+		uint256 amountTokenMin,
+		uint256 amountETHMin,
+		address to,
+		uint256 deadline
+	) external returns (uint256 amountETH);
+
+	function removeLiquidityETHWithPermitSupportingFeeOnTransferTokens(
+		address token,
+		uint256 liquidity,
+		uint256 amountTokenMin,
+		uint256 amountETHMin,
+		address to,
+		uint256 deadline,
+		bool approveMax,
+		uint8 v,
+		bytes32 r,
+		bytes32 s
+	) external returns (uint256 amountETH);
+
 	function swapExactTokensForTokens(
 		uint256 amountIn,
 		uint256 amountOutMin,
@@ -132,6 +154,29 @@ interface IPancakeRouter01 {
 		address to,
 		uint256 deadline
 	) external payable returns (uint256[] memory amounts);
+
+	function swapExactTokensForTokensSupportingFeeOnTransferTokens(
+		uint256 amountIn,
+		uint256 amountOutMin,
+		address[] calldata path,
+		address to,
+		uint256 deadline
+	) external;
+
+	function swapExactETHForTokensSupportingFeeOnTransferTokens(
+		uint256 amountOutMin,
+		address[] calldata path,
+		address to,
+		uint256 deadline
+	) external payable;
+
+	function swapExactTokensForETHSupportingFeeOnTransferTokens(
+		uint256 amountIn,
+		uint256 amountOutMin,
+		address[] calldata path,
+		address to,
+		uint256 deadline
+	) external;
 
 	function quote(
 		uint256 amountA,

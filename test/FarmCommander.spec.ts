@@ -1,285 +1,352 @@
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import chai, { expect } from "chai";
 import chaiAsPromised from "chai-as-promised";
 import { solidity } from "ethereum-waffle";
-import { ethers, network } from "hardhat";
-import { FarmCommander, HyperToken, SpaceMaster } from "../build/types";
-import { EthersGetContract, Strategy } from "../types";
-import { STRATEGIES, NAME_TOKEN, NAME_FARM, NAME_MASTER } from "../constants";
 import { constants } from "ethers";
-import { wait } from "../utils/network";
-import { parseEther } from "@ethersproject/units";
+import { parseEther } from "ethers/lib/utils";
+import { NAME_FARM } from "../constants";
+import { getBlockNumber, wait } from "../utils/network";
 import {
-	mockPancakeFarm,
-	mockBEP20,
-	mockPancakeRouter02,
-	mockPancakePair
-} from "./utils/mocker";
+	getBalance,
+	revertToSnapShot,
+	fixture,
+	takeSnapshot,
+	getBEP20Contract
+} from "./utils";
 
 chai.use(chaiAsPromised);
 chai.use(solidity);
 
 describe(NAME_FARM, () => {
-	const contracts: Record<
-		string,
-		Strategy & { contract: FarmCommander }
-	> = {};
-	let deployer: SignerWithAddress,
-		gov: SignerWithAddress,
-		rewards: SignerWithAddress,
-		user: SignerWithAddress,
-		owner: SignerWithAddress,
-		hypr: HyperToken,
-		master: SpaceMaster;
+	let snapshotId: string;
 
 	before(async () => {
-		[deployer, gov, rewards, user] = await ethers.getSigners();
-		hypr = await (ethers as EthersGetContract<HyperToken>).getContract(
-			NAME_TOKEN
-		);
-		master = await (ethers as EthersGetContract<SpaceMaster>).getContract(
-			NAME_MASTER
-		);
-		owner = await network.provider
-			.request({
-				method: "hardhat_impersonateAccount",
-				params: [master.address]
-			})
-			.then(() => ethers.getSigner(master.address));
-
-		const bep20 = await mockBEP20(deployer, [
-			{ name: "transfer", returns: [true] },
-			{ name: "transferFrom", returns: [true] },
-			{ name: "balanceOf", returns: [parseEther("1")] },
-			{ name: "allowance", returns: [parseEther("0")] },
-			{ name: "approve", returns: [true] }
-		]);
-		const panFarm = await mockPancakeFarm(deployer, [
-			{ name: "enterStaking" },
-			{ name: "leaveStaking" },
-			{ name: "deposit" },
-			{ name: "withdraw" }
-		]);
-		const panRouter = await mockPancakeRouter02(deployer, [
-			{ name: "swapExactTokensForTokensSupportingFeeOnTransferTokens" },
-			{
-				name: "addLiquidity",
-				returns: [parseEther("0.5"), parseEther("0.5"), parseEther("1")]
-			}
-		]);
-		const panPair = await mockPancakePair(deployer, [
-			{ name: "balanceOf", returns: [parseEther("1")] }
-		]);
-		const strategies = STRATEGIES.filter(strat =>
-			/HYPR-WBNB|(BNB-BUSD LP)/.test(strat.symbol)
-		);
-
-		for (let i = 0, n = strategies.length; i < n; i++) {
-			const strategy = strategies[i];
-			const addresses = [
-				hypr.address,
-				bep20.address,
-				process.env.WBNB ?? constants.AddressZero,
-				master.address
-			];
-
-			if (strategy.isHYPRComp) {
-				addresses.push(
-					panFarm.address,
-					panRouter.address,
-					bep20.address,
-					gov.address,
-					rewards.address,
-					panPair.address
-				);
-			} else {
-				addresses.push(bep20.address, gov.address, rewards.address);
-			}
-
-			const farm = (await ethers
-				.getContractFactory(NAME_FARM)
-				.then(factory =>
-					factory.deploy(
-						strategy.isHYPRComp ? strategy.pid : i,
-						addresses,
-						strategy.isHYPRComp,
-						strategy.isCAKEStaking
-					)
-				)
-				.then(contract => contract.deployed())) as FarmCommander;
-
-			contracts[strategy.symbol] = { ...strategy, contract: farm };
-		}
-	});
-
-	it("should return total LP earned", async () => {
-		// Assert
-		expect(await contracts["HYPR-WBNB"].contract.totalLpEarned()).to.equal(
-			constants.Zero
-		);
-	});
-
-	describe("setWbnbAddress", () => {
-		it("should require from current gov address", async () => {
-			// Assert
-			await expect(
-				contracts["HYPR-WBNB"].contract
-					.connect(user)
-					.setWbnbAddress(user.address)
-			).to.be.revertedWith("StrategyCaptain: not authorised");
-			expect(await contracts["HYPR-WBNB"].contract.wbnbAdrs()).to.equal(
-				process.env.WBNB
-			);
-		});
-
-		it("should set WBNB address", async () => {
-			// Act
-			const result = contracts["HYPR-WBNB"].contract
-				.connect(gov)
-				.setWbnbAddress(user.address);
-
-			// Assert
-			await expect(result)
-				.to.emit(contracts["HYPR-WBNB"].contract, "SetWbnbAddress")
-				.withArgs(user.address);
-			await result.then(wait);
-			expect(await contracts["HYPR-WBNB"].contract.wbnbAdrs()).to.equal(
-				user.address
-			);
-		});
-
-		after(async () => {
-			await contracts["HYPR-WBNB"].contract
-				.connect(gov)
-				.setWbnbAddress(process.env.WBNB ?? constants.AddressZero)
-				.then(wait);
-		});
+		snapshotId = await takeSnapshot();
 	});
 
 	describe("deposit", () => {
 		it("should require owner", async () => {
+			// Arrange
+			const { FarmCommander, Pair, Accounts } = await fixture(
+				"BNB-BUSD LP"
+			);
+			const { master } = Accounts;
+			const pairMasterBal = await getBalance(master.address, Pair);
+
 			// Assert
 			await expect(
-				contracts["HYPR-WBNB"].contract.deposit(parseEther("1"))
+				FarmCommander.deposit(parseEther("1"))
 			).to.be.revertedWith("Ownable: caller is not the owner");
+			expect(await getBalance(master.address, Pair)).to.equal(
+				pairMasterBal
+			);
 		});
 
 		it("should require unpaused", async () => {
 			// Arrange
-			await contracts["HYPR-WBNB"].contract
-				.connect(gov)
+			const { FarmCommander, Pair, Accounts } = await fixture(
+				"BNB-BUSD LP"
+			);
+			const { strategyGov, master } = Accounts;
+			const pairMasterBal = await getBalance(master.address, Pair);
+
+			await FarmCommander.connect(strategyGov)
 				.pause()
 				.then(wait);
 
 			// Assert
 			await expect(
-				contracts["HYPR-WBNB"].contract
-					.connect(owner)
-					.deposit(parseEther("1"))
+				FarmCommander.connect(master).deposit(parseEther("1"))
 			).to.be.revertedWith("Pausable: paused");
+			expect(await getBalance(master.address, Pair)).to.equal(
+				pairMasterBal
+			);
 
-			await contracts["HYPR-WBNB"].contract
-				.connect(gov)
+			await FarmCommander.connect(strategyGov)
 				.unpause()
 				.then(wait);
 		});
 
-		it("should deposit when HYPR is not comp", async () => {
+		it("should deposit and farm when farm commander is HYPR comp", async () => {
+			// Arrange
+			const { FarmCommander, Pair, Accounts, state } = await fixture(
+				"BNB-BUSD LP"
+			);
+			const { master } = Accounts;
+			const amount = parseEther("1");
+
+			await Pair.connect(master)
+				.approve(FarmCommander.address, constants.MaxUint256)
+				.then(wait);
+			await Pair.transfer(master.address, amount).then(wait);
+
+			const { totalWantLocked } = await state.FarmCommander();
+			const [pairMasterBal, pairFarmBal] = await getBalance({
+				[master.address]: Pair,
+				[process.env.ADRS_FARM ?? constants.AddressZero]: Pair
+			});
+
 			// Act
-			await contracts["HYPR-WBNB"].contract
-				.connect(owner)
-				.deposit(parseEther("1"))
+			await FarmCommander.connect(master)
+				.deposit(amount)
 				.then(wait);
 
 			// Assert
+			expect(await getBalance(master.address, Pair)).to.equal(
+				pairMasterBal.sub(amount)
+			);
+			expect(await getBalance(FarmCommander.address, Pair)).to.equal(
+				constants.Zero
+			);
 			expect(
-				await contracts["HYPR-WBNB"].contract.totalWantLocked()
-			).to.equal(parseEther("1"));
-		});
-
-		it("should deposit when HYPR is comp", async () => {
-			// Act
-			await contracts["BNB-BUSD LP"].contract
-				.connect(owner)
-				.deposit(parseEther("1"))
-				.then(wait);
-
-			// Assert
-			expect(
-				await contracts["BNB-BUSD LP"].contract.totalWantLocked()
-			).to.equal(parseEther("1"));
+				await getBalance(
+					process.env.ADRS_FARM ?? constants.AddressZero,
+					Pair
+				)
+			).to.equal(pairFarmBal.add(amount));
+			expect(await FarmCommander.totalWantLocked()).to.equal(
+				totalWantLocked.add(amount)
+			);
 		});
 	});
 
 	describe("withdraw", () => {
 		it("should require owner", async () => {
+			// Arrange
+			const { FarmCommander, Pair, Accounts } = await fixture(
+				"BNB-BUSD LP"
+			);
+			const { master } = Accounts;
+			const pairMasterBal = await getBalance(master.address, Pair);
+
 			// Assert
 			await expect(
-				contracts["HYPR-WBNB"].contract.withdraw(parseEther("1"))
+				FarmCommander.withdraw(parseEther("1"))
 			).to.be.revertedWith("Ownable: caller is not the owner");
+			expect(await getBalance(master.address, Pair)).to.equal(
+				pairMasterBal
+			);
 		});
 
-		it("should withdraw when HYPR is not comp", async () => {
+		it("should require amount above zero", async () => {
+			// Arrange
+			const { FarmCommander, Pair, Accounts } = await fixture(
+				"BNB-BUSD LP"
+			);
+			const { master } = Accounts;
+			const pairMasterBal = await getBalance(master.address, Pair);
+
+			// Assert
+			await expect(
+				FarmCommander.connect(master).withdraw(constants.Zero)
+			).to.be.revertedWith("FarmCommander: amount <= 0");
+			expect(await getBalance(master.address, Pair)).to.equal(
+				pairMasterBal
+			);
+		});
+
+		it("should withdraw", async () => {
+			// Arrange
+			const { FarmCommander, Pair, Accounts, state } = await fixture(
+				"BNB-BUSD LP"
+			);
+			const { master } = Accounts;
+			const amount = parseEther("1");
+
+			await Pair.connect(master)
+				.approve(FarmCommander.address, constants.MaxUint256)
+				.then(wait);
+			await Pair.transfer(master.address, amount).then(wait);
+			await FarmCommander.connect(master)
+				.deposit(amount)
+				.then(wait);
+
+			const { totalWantLocked } = await state.FarmCommander();
+			const [pairMasterBal, pairFarmBal] = await getBalance({
+				[master.address]: Pair,
+				[process.env.ADRS_FARM ?? constants.AddressZero]: Pair
+			});
+
 			// Act
-			await contracts["HYPR-WBNB"].contract
-				.connect(owner)
-				.withdraw(parseEther("0.5"))
+			await FarmCommander.connect(master)
+				.withdraw(amount)
 				.then(wait);
 
 			// Assert
+			expect(await getBalance(master.address, Pair)).to.equal(
+				pairMasterBal.add(amount)
+			);
+			expect(await getBalance(FarmCommander.address, Pair)).to.equal(
+				constants.Zero
+			);
 			expect(
-				await contracts["HYPR-WBNB"].contract.totalWantLocked()
-			).to.equal(parseEther("0.5"));
-		});
-
-		it("should withdraw when HYPR is comp", async () => {
-			// Act
-			await contracts["BNB-BUSD LP"].contract
-				.connect(owner)
-				.withdraw(parseEther("0.5"))
-				.then(wait);
-
-			// Assert
-			expect(
-				await contracts["BNB-BUSD LP"].contract.totalWantLocked()
-			).to.equal(parseEther("0.5"));
+				await getBalance(
+					process.env.ADRS_FARM ?? constants.AddressZero,
+					Pair
+				)
+			).to.equal(pairFarmBal.sub(amount));
+			expect(await FarmCommander.totalWantLocked()).to.equal(
+				totalWantLocked.sub(amount)
+			);
 		});
 	});
 
 	describe("earn", () => {
 		it("should require unpaused", async () => {
 			// Arrange
-			await contracts["HYPR-WBNB"].contract
-				.connect(gov)
+			const { FarmCommander, Accounts, state } = await fixture();
+			const { strategyGov, master } = Accounts;
+			const { lastEarnBlock } = await state.FarmCommander();
+
+			await FarmCommander.connect(strategyGov)
 				.pause()
 				.then(wait);
 
 			// Assert
 			await expect(
-				contracts["HYPR-WBNB"].contract.earn()
+				FarmCommander.connect(master).earn()
 			).to.be.revertedWith("Pausable: paused");
+			expect(await FarmCommander.lastEarnBlock()).to.equal(lastEarnBlock);
 
-			await contracts["HYPR-WBNB"].contract
-				.connect(gov)
+			await FarmCommander.connect(strategyGov)
 				.unpause()
 				.then(wait);
 		});
 
-		it("should require is HYPR comp", async () => {
+		it("should require to be HYPR comp", async () => {
+			// Arrange
+			const { FarmCommander, Accounts, state } = await fixture();
+			const { master } = Accounts;
+			const { lastEarnBlock } = await state.FarmCommander();
+
 			// Assert
 			await expect(
-				contracts["HYPR-WBNB"].contract.earn()
+				FarmCommander.connect(master).earn()
 			).to.be.revertedWith("FarmCommander: must be HYPR compound");
+			expect(await FarmCommander.lastEarnBlock()).to.equal(lastEarnBlock);
+		});
+
+		it("should require gov when only gov", async () => {
+			// Arrange
+			const { FarmCommander, Accounts, state } = await fixture(
+				"BNB-BUSD LP"
+			);
+			const { strategyGov, master } = Accounts;
+			const { lastEarnBlock } = await state.FarmCommander();
+
+			await FarmCommander.connect(strategyGov)
+				.setOnlyGov(true)
+				.then(wait);
+
+			// Assert
+			await expect(
+				FarmCommander.connect(master).earn()
+			).to.be.revertedWith("FarmCommander: not authorised");
+			expect(await FarmCommander.lastEarnBlock()).to.equal(lastEarnBlock);
 		});
 
 		it("should earn", async () => {
+			// Arrange
+			const {
+				HyperToken,
+				FarmCommander,
+				Pair,
+				Accounts,
+				state
+			} = await fixture("BNB-BUSD LP");
+			const { strategyGov, strategyFee, master } = Accounts;
+			const Earned = await getBEP20Contract(process.env.ADRS_CAKE);
+
+			if (!Earned) throw new Error("Earned not found");
+
+			await FarmCommander.connect(strategyGov)
+				.setOnlyGov(false)
+				.then(wait);
+			await Pair.connect(master)
+				.approve(FarmCommander.address, constants.MaxUint256)
+				.then(wait);
+			await Pair.transfer(master.address, parseEther("1")).then(wait);
+			await FarmCommander.connect(master)
+				.deposit(parseEther("1"))
+				.then(wait);
+			await FarmCommander.connect(master)
+				.withdraw(parseEther("1"))
+				.then(wait);
+
+			const {
+				buyBackAdrs,
+				totalLpEarned,
+				calcFee
+			} = await state.FarmCommander();
+			const [
+				hyprBuyBackBal,
+				earnedCmdrBal,
+				earnedFeeBal
+			] = await getBalance({
+				[buyBackAdrs]: HyperToken,
+				[FarmCommander.address]: Earned,
+				[strategyFee.address]: Earned
+			});
+			const depositFee = calcFee(earnedCmdrBal);
+
 			// Act
-			await contracts["BNB-BUSD LP"].contract.earn().then(wait);
+			await FarmCommander.connect(master)
+				.earn()
+				.then(wait);
 
 			// Assert
-			expect(
-				await contracts["BNB-BUSD LP"].contract.lastEarnBlock()
-			).to.equal(await ethers.provider.getBlockNumber());
+			expect(await getBalance(strategyFee.address, Earned)).to.equal(
+				earnedFeeBal.add(depositFee)
+			);
+			expect(await getBalance(buyBackAdrs, HyperToken)).to.be.gt(
+				hyprBuyBackBal
+			);
+			expect(await FarmCommander.totalLpEarned()).to.be.gt(totalLpEarned);
+			expect(await FarmCommander.lastEarnBlock()).to.equal(
+				await getBlockNumber()
+			);
 		});
+	});
+
+	describe("setWbnbAddress", () => {
+		it("should require from gov address", async () => {
+			// Arrange
+			const { FarmCommander, Accounts, state } = await fixture();
+			const { user } = Accounts;
+			const { wbnbAdrs } = await state.FarmCommander();
+
+			// Assert
+			await expect(
+				FarmCommander.setWbnbAddress(user.address)
+			).to.be.revertedWith("StrategyCaptain: not authorised");
+			expect(await FarmCommander.wbnbAdrs()).to.equal(wbnbAdrs);
+		});
+
+		it("should set WBNB address", async () => {
+			// Arrange
+			const { FarmCommander, Accounts } = await fixture();
+			const { strategyGov, user } = Accounts;
+
+			// Act
+			const result = FarmCommander.connect(strategyGov).setWbnbAddress(
+				user.address
+			);
+
+			// Assert
+			await expect(result)
+				.to.emit(FarmCommander, "SetWbnbAddress")
+				.withArgs(user.address);
+			await result.then(wait);
+			expect(await FarmCommander.wbnbAdrs()).to.equal(user.address);
+			expect(await FarmCommander.earnedToWbnbPath(1)).to.equal(
+				user.address
+			);
+			expect(await FarmCommander.wbnbToHyprPath(0)).to.equal(
+				user.address
+			);
+		});
+	});
+
+	after(async () => {
+		await revertToSnapShot(snapshotId);
 	});
 });

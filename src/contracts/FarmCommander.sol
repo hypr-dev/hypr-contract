@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.7.6;
+pragma solidity >=0.6.0 <0.8.0;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@uniswap/lib/contracts/libraries/Babylonian.sol";
-import "../libs/SafeBEP20.sol";
 import "../libs/interfaces/IBEP20.sol";
-import "../libs/interfaces/IPancakePair.sol";
-import "../libs/interfaces/IPancakeFarm.sol";
-import "../libs/interfaces/IPancakeRouter02.sol";
+import "../libs/interfaces/IPair.sol";
+import "../libs/interfaces/IFarm.sol";
+import "../libs/interfaces/IRouter.sol";
+import "../libs/SafeBEP20.sol";
 import "./StrategyCaptain.sol";
 
 contract FarmCommander is StrategyCaptain {
@@ -44,7 +44,7 @@ contract FarmCommander is StrategyCaptain {
 			routerAdrs = _addresses[5];
 			earnedAdrs = _addresses[6];
 			govAdrs = _addresses[7];
-			rewardsAdrs = _addresses[8];
+			feeAdrs = _addresses[8];
 			wbnbPairAdrs = _addresses[9];
 
 			earnedToWbnbPath = [earnedAdrs, wbnbAdrs];
@@ -52,19 +52,12 @@ contract FarmCommander is StrategyCaptain {
 		} else {
 			earnedAdrs = _addresses[4];
 			govAdrs = _addresses[5];
-			rewardsAdrs = _addresses[6];
+			feeAdrs = _addresses[6];
 		}
 
+		controllerFee = 150;
+
 		transferOwnership(masterAdrs);
-	}
-
-	function setWbnbAddress(address _wbnbAdrs) public override onlyAllowGov {
-		wbnbAdrs = _wbnbAdrs;
-
-		earnedToWbnbPath = [earnedAdrs, wbnbAdrs];
-		wbnbToHyprPath = [wbnbAdrs, hyprAdrs];
-
-		emit SetWbnbAddress(wbnbAdrs);
 	}
 
 	// Receives new deposits from user
@@ -100,9 +93,9 @@ contract FarmCommander is StrategyCaptain {
 
 		if (isHYPRComp) {
 			if (isCAKEStaking) {
-				IPancakeFarm(farmAdrs).leaveStaking(wantAmt); // Just for CAKE staking, we dont use withdraw()
+				IFarm(farmAdrs).leaveStaking(wantAmt); // Just for CAKE staking, we dont use withdraw()
 			} else {
-				IPancakeFarm(farmAdrs).withdraw(pid, wantAmt);
+				IFarm(farmAdrs).withdraw(pid, wantAmt);
 			}
 		}
 
@@ -136,9 +129,9 @@ contract FarmCommander is StrategyCaptain {
 
 		// Harvest farm tokens
 		if (isCAKEStaking) {
-			IPancakeFarm(farmAdrs).leaveStaking(0); // Just for CAKE staking, we dont use withdraw()
+			IFarm(farmAdrs).leaveStaking(0); // Just for CAKE staking, we dont use withdraw()
 		} else {
-			IPancakeFarm(farmAdrs).withdraw(pid, 0);
+			IFarm(farmAdrs).withdraw(pid, 0);
 		}
 
 		if (earnedAdrs == wbnbAdrs) {
@@ -155,6 +148,15 @@ contract FarmCommander is StrategyCaptain {
 		lastEarnBlock = block.number;
 	}
 
+	function setWbnbAddress(address _wbnbAdrs) public override onlyAllowGov {
+		wbnbAdrs = _wbnbAdrs;
+
+		earnedToWbnbPath = [earnedAdrs, wbnbAdrs];
+		wbnbToHyprPath = [wbnbAdrs, hyprAdrs];
+
+		emit SetWbnbAddress(wbnbAdrs);
+	}
+
 	function _buyBack(uint256 earnedAmt) internal {
 		require(isHYPRComp, "FarmCommander: must be HYPR compound");
 
@@ -163,7 +165,7 @@ contract FarmCommander is StrategyCaptain {
 		}
 
 		IBEP20(earnedAdrs).safeIncreaseAllowance(routerAdrs, earnedAmt);
-		IPancakeRouter02(routerAdrs)
+		IRouter(routerAdrs)
 			.swapExactTokensForTokensSupportingFeeOnTransferTokens(
 			earnedAmt,
 			0,
@@ -185,7 +187,7 @@ contract FarmCommander is StrategyCaptain {
 				.div(1994);
 
 		IBEP20(wbnbAdrs).safeIncreaseAllowance(routerAdrs, wbnbBal);
-		IPancakeRouter02(routerAdrs)
+		IRouter(routerAdrs)
 			.swapExactTokensForTokensSupportingFeeOnTransferTokens(
 			swapAmt,
 			0,
@@ -197,10 +199,10 @@ contract FarmCommander is StrategyCaptain {
 		wbnbBal = IBEP20(wbnbAdrs).balanceOf(address(this));
 
 		uint256 hyprBal = IBEP20(hyprAdrs).balanceOf(address(this));
-		uint256 lpMasterBal = IPancakePair(wbnbPairAdrs).balanceOf(masterAdrs);
+		uint256 lpMasterBal = IPair(wbnbPairAdrs).balanceOf(masterAdrs);
 
 		IBEP20(hyprAdrs).safeIncreaseAllowance(routerAdrs, hyprBal);
-		IPancakeRouter02(routerAdrs).addLiquidity(
+		IRouter(routerAdrs).addLiquidity(
 			wbnbAdrs,
 			hyprAdrs,
 			wbnbBal,
@@ -211,11 +213,11 @@ contract FarmCommander is StrategyCaptain {
 			block.timestamp + 600
 		);
 
-		lpMasterBal = IPancakePair(wbnbPairAdrs).balanceOf(masterAdrs).sub(
+		hyprBal = IBEP20(hyprAdrs).balanceOf(address(this));
+		lpMasterBal = IPair(wbnbPairAdrs).balanceOf(masterAdrs).sub(
 			lpMasterBal
 		);
 		totalLpEarned = totalLpEarned.add(lpMasterBal);
-		hyprBal = IBEP20(hyprAdrs).balanceOf(address(this));
 
 		IBEP20(hyprAdrs).transfer(buyBackAdrs, hyprBal);
 	}

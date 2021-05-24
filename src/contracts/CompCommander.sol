@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.7.6;
+pragma solidity >=0.6.0 <0.8.0;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
-import "../libs/SafeBEP20.sol";
 import "../libs/interfaces/IBEP20.sol";
-import "../libs/interfaces/IPancakeFarm.sol";
-import "../libs/interfaces/IPancakeRouter02.sol";
+import "../libs/interfaces/IFarm.sol";
+import "../libs/interfaces/IRouter.sol";
+import "../libs/SafeBEP20.sol";
 import "./StrategyCaptain.sol";
 
 contract CompCommander is StrategyCaptain {
@@ -51,6 +51,7 @@ contract CompCommander is StrategyCaptain {
 	constructor(
 		uint256 _pid,
 		address[] memory _addresses,
+		address[] memory _earnedToHyprPath,
 		address[] memory _earnedToToken0Path,
 		address[] memory _earnedToToken1Path,
 		address[] memory _token0ToEarnedPath,
@@ -71,15 +72,15 @@ contract CompCommander is StrategyCaptain {
 		masterAdrs = _addresses[3];
 		farmAdrs = _addresses[4];
 		routerAdrs = _addresses[5];
-		govAdrs = _addresses[6];
-		earnedAdrs = _addresses[7];
-		rewardsAdrs = _addresses[8];
+		earnedAdrs = _addresses[6];
+		govAdrs = _addresses[7];
+		feeAdrs = _addresses[8];
 		depositFeeAdrs = _addresses[9];
 		withdrawFeeAdrs = _addresses[10];
 		token0Adrs = _addresses[11];
 		token1Adrs = _addresses[12];
 
-		earnedToHyprPath = [earnedAdrs, hyprAdrs];
+		earnedToHyprPath = _earnedToHyprPath;
 		earnedToToken0Path = _earnedToToken0Path;
 		earnedToToken1Path = _earnedToToken1Path;
 		token0ToEarnedPath = _token0ToEarnedPath;
@@ -88,60 +89,6 @@ contract CompCommander is StrategyCaptain {
 		controllerFee = 200;
 
 		transferOwnership(masterAdrs);
-	}
-
-	function setSettings(
-		uint256 _controllerFee,
-		uint256 _entranceFeeFactor,
-		uint256 _withdrawFeeFactor,
-		uint256 _buyBackRate,
-		uint256 _slippageFactor
-	) public onlyAllowGov {
-		require(
-			_entranceFeeFactor >= ENTRANCE_FEE_FACTOR_LL,
-			"CompCommander: entrance fee factor is too low"
-		);
-		require(
-			_entranceFeeFactor <= ENTRANCE_FEE_FACTOR_MAX,
-			"CompCommander: entrance fee factor is too high"
-		);
-		entranceFeeFactor = _entranceFeeFactor;
-
-		require(
-			_withdrawFeeFactor >= WITHDRAW_FEE_FACTOR_LL,
-			"CompCommander: withdraw fee factor is too low"
-		);
-		require(
-			_withdrawFeeFactor <= WITHDRAW_FEE_FACTOR_MAX,
-			"CompCommander: withdraw fee factor is too high"
-		);
-		withdrawFeeFactor = _withdrawFeeFactor;
-
-		require(
-			_controllerFee <= CONTROLLER_FEE_UL,
-			"CompCommander: controller fee is too high"
-		);
-		controllerFee = _controllerFee;
-
-		require(
-			_buyBackRate <= BUYBACK_RATE_UL,
-			"CompCommander: buy back rate is too high"
-		);
-		buyBackRate = _buyBackRate;
-
-		require(
-			_slippageFactor <= SLIPPAGE_FACTOR_UL,
-			"CompCommander: slippage factor is too high"
-		);
-		slippageFactor = _slippageFactor;
-
-		emit SetSettings(
-			_controllerFee,
-			_entranceFeeFactor,
-			_withdrawFeeFactor,
-			_buyBackRate,
-			_slippageFactor
-		);
 	}
 
 	// Receives new deposits from user
@@ -190,10 +137,6 @@ contract CompCommander is StrategyCaptain {
 		}
 
 		return sharesAdded;
-	}
-
-	function farm() public nonReentrant {
-		_farm();
 	}
 
 	function withdraw(uint256 wantAmt)
@@ -276,7 +219,9 @@ contract CompCommander is StrategyCaptain {
 
 		if (isCAKEStaking || isSameAssetDeposit) {
 			lastEarnBlock = block.number;
+
 			_farm();
+
 			return;
 		}
 
@@ -314,7 +259,7 @@ contract CompCommander is StrategyCaptain {
 		if (token0Bal > 0 && token1Bal > 0) {
 			IBEP20(token0Adrs).safeIncreaseAllowance(routerAdrs, token0Bal);
 			IBEP20(token1Adrs).safeIncreaseAllowance(routerAdrs, token1Bal);
-			IPancakeRouter02(routerAdrs).addLiquidity(
+			IRouter(routerAdrs).addLiquidity(
 				token0Adrs,
 				token1Adrs,
 				token0Bal,
@@ -372,11 +317,69 @@ contract CompCommander is StrategyCaptain {
 		}
 	}
 
+	function farm() public nonReentrant {
+		_farm();
+	}
+
+	function setSettings(
+		uint256 _controllerFee,
+		uint256 _entranceFeeFactor,
+		uint256 _withdrawFeeFactor,
+		uint256 _buyBackRate,
+		uint256 _slippageFactor
+	) public onlyAllowGov {
+		require(
+			_entranceFeeFactor >= ENTRANCE_FEE_FACTOR_LL,
+			"CompCommander: entrance fee factor is too low"
+		);
+		require(
+			_entranceFeeFactor <= ENTRANCE_FEE_FACTOR_MAX,
+			"CompCommander: entrance fee factor is too high"
+		);
+		entranceFeeFactor = _entranceFeeFactor;
+
+		require(
+			_withdrawFeeFactor >= WITHDRAW_FEE_FACTOR_LL,
+			"CompCommander: withdraw fee factor is too low"
+		);
+		require(
+			_withdrawFeeFactor <= WITHDRAW_FEE_FACTOR_MAX,
+			"CompCommander: withdraw fee factor is too high"
+		);
+		withdrawFeeFactor = _withdrawFeeFactor;
+
+		require(
+			_controllerFee <= CONTROLLER_FEE_UL,
+			"CompCommander: controller fee is too high"
+		);
+		controllerFee = _controllerFee;
+
+		require(
+			_buyBackRate <= BUYBACK_RATE_UL,
+			"CompCommander: buy back rate is too high"
+		);
+		buyBackRate = _buyBackRate;
+
+		require(
+			_slippageFactor <= SLIPPAGE_FACTOR_UL,
+			"CompCommander: slippage factor is too high"
+		);
+		slippageFactor = _slippageFactor;
+
+		emit SetSettings(
+			_controllerFee,
+			_entranceFeeFactor,
+			_withdrawFeeFactor,
+			_buyBackRate,
+			_slippageFactor
+		);
+	}
+
 	function _unfarm(uint256 wantAmt) internal {
 		if (isCAKEStaking) {
-			IPancakeFarm(farmAdrs).leaveStaking(wantAmt); // Just for CAKE staking, we dont use withdraw()
+			IFarm(farmAdrs).leaveStaking(wantAmt); // Just for CAKE staking, we dont use withdraw()
 		} else {
-			IPancakeFarm(farmAdrs).withdraw(pid, wantAmt);
+			IFarm(farmAdrs).withdraw(pid, wantAmt);
 		}
 	}
 
@@ -414,10 +417,10 @@ contract CompCommander is StrategyCaptain {
 		uint256 _deadline
 	) internal virtual {
 		uint256[] memory amounts =
-			IPancakeRouter02(_routerAdrs).getAmountsOut(_amountIn, _path);
+			IRouter(_routerAdrs).getAmountsOut(_amountIn, _path);
 		uint256 amountOut = amounts[amounts.length.sub(1)];
 
-		IPancakeRouter02(_routerAdrs)
+		IRouter(_routerAdrs)
 			.swapExactTokensForTokensSupportingFeeOnTransferTokens(
 			_amountIn,
 			amountOut.mul(_slippageFactor).div(1000),

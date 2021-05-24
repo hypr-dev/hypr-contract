@@ -1,15 +1,14 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { deployMockContract, MockContract } from "ethereum-waffle";
 import BEP20 from "../../build/abi/BEP20.json";
-import IPancakeFarm from "../../build/abi/IPancakeFarm.json";
-import IPancakeRouter02 from "../../build/abi/IPancakeRouter02.json";
-import IPancakePair from "../../build/abi/IPancakePair.json";
+import IFarm from "../../build/abi/IFarm.json";
+import IRouter from "../../build/abi/IRouter.json";
+import IPair from "../../build/abi/IPair.json";
 import FarmCommander from "../../build/abi/FarmCommander.json";
-import { MockMethod } from "../../types";
 
 export const mockBEP20 = (
 	deployer: SignerWithAddress,
-	mockMethods: MockMethod[]
+	mockMethods: MockMethod[] = []
 ): Promise<MockContract> =>
 	deployMockContract(deployer, BEP20).then(async contract => {
 		for (let i = 0, n = mockMethods.length; i < n; i++) {
@@ -23,11 +22,11 @@ export const mockBEP20 = (
 		return contract;
 	});
 
-export const mockPancakeFarm = (
+export const mockFarm = (
 	deployer: SignerWithAddress,
-	mockMethods: MockMethod[]
+	mockMethods: MockMethod[] = []
 ): Promise<MockContract> =>
-	deployMockContract(deployer, IPancakeFarm).then(async contract => {
+	deployMockContract(deployer, IFarm).then(async contract => {
 		for (let i = 0, n = mockMethods.length; i < n; i++) {
 			const mockMethod = mockMethods[i];
 
@@ -39,11 +38,11 @@ export const mockPancakeFarm = (
 		return contract;
 	});
 
-export const mockPancakeRouter02 = (
+export const mockRouter = (
 	deployer: SignerWithAddress,
-	mockMethods: MockMethod[]
+	mockMethods: MockMethod[] = []
 ): Promise<MockContract> =>
-	deployMockContract(deployer, IPancakeRouter02).then(async contract => {
+	deployMockContract(deployer, IRouter).then(async contract => {
 		for (let i = 0, n = mockMethods.length; i < n; i++) {
 			const mockMethod = mockMethods[i];
 
@@ -55,11 +54,11 @@ export const mockPancakeRouter02 = (
 		return contract;
 	});
 
-export const mockPancakePair = (
+export const mockPair = (
 	deployer: SignerWithAddress,
-	mockMethods: MockMethod[]
+	mockMethods: MockMethod[] = []
 ): Promise<MockContract> =>
-	deployMockContract(deployer, IPancakePair).then(async contract => {
+	deployMockContract(deployer, IPair).then(async contract => {
 		for (let i = 0, n = mockMethods.length; i < n; i++) {
 			const mockMethod = mockMethods[i];
 
@@ -73,7 +72,7 @@ export const mockPancakePair = (
 
 export const mockFarmCommander = (
 	deployer: SignerWithAddress,
-	mockMethods: MockMethod[]
+	mockMethods: MockMethod[] = []
 ): Promise<MockContract> =>
 	deployMockContract(deployer, FarmCommander).then(async contract => {
 		for (let i = 0, n = mockMethods.length; i < n; i++) {

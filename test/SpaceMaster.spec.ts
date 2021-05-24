@@ -1,553 +1,852 @@
-import fs from "fs";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import chai, { expect } from "chai";
 import chaiAsPromised from "chai-as-promised";
-import { MockContract, solidity } from "ethereum-waffle";
-import { ethers } from "hardhat";
+import { solidity } from "ethereum-waffle";
 import { constants } from "ethers";
-import { BEP20, HyperToken, SpaceMaster } from "../build/types";
+import { ethers } from "hardhat";
+import { DURATION, NAME_MASTER, STRATEGIES } from "../constants";
+import { getBlockNumber, wait } from "../utils/network";
+import { parseEther } from "../utils/parser";
 import {
-	DEFAULT_FILENAME_PAIRS,
-	DEFAULT_FILENAME_FARMS,
-	STRATEGIES,
-	NAME_TOKEN,
-	NAME_MASTER,
-	ETH_INITIAL_MINT
-} from "../constants";
-import { getWeight } from "../utils/parser";
-import { AddressJson } from "../types";
-import { wait } from "../utils/network";
-import { parseEther } from "ethers/lib/utils";
-import { mockFarmCommander } from "./utils/mocker";
+	getBalance,
+	revertToSnapShot,
+	fixture,
+	takeSnapshot,
+	increase,
+	mockFarmCommander
+} from "./utils";
 
 chai.use(chaiAsPromised);
 chai.use(solidity);
 
 describe(NAME_MASTER, () => {
-	const PAIRS = JSON.parse(
-		fs.readFileSync(
-			`./dist/${process.env.FILENAME_PAIRS ?? DEFAULT_FILENAME_PAIRS}`,
-			"utf8"
-		)
-	) as AddressJson;
-	const FARMS = JSON.parse(
-		fs.readFileSync(
-			`./dist/${process.env.FILENAME_FARMS ?? DEFAULT_FILENAME_FARMS}`,
-			"utf8"
-		)
-	) as AddressJson;
-	let deployer: SignerWithAddress,
-		devWallet: SignerWithAddress,
-		feeBb: SignerWithAddress,
-		feeSt: SignerWithAddress,
-		user: SignerWithAddress,
-		hypr: HyperToken,
-		want: BEP20,
-		farm: MockContract,
-		contract: SpaceMaster;
+	let snapshotId: string;
 
 	before(async () => {
-		const startBlock = await ethers.provider.getBlockNumber();
-
-		[deployer, devWallet, feeBb, feeSt, user] = await ethers.getSigners();
-		hypr = (await ethers
-			.getContractFactory(NAME_TOKEN)
-			.then(factory => factory.deploy())
-			.then(contract => contract.deployed())) as HyperToken;
-		want = (await ethers
-			.getContractFactory("BEP20")
-			.then(factory => factory.deploy("X Token", "X"))) as BEP20;
-		farm = await mockFarmCommander(deployer, [
-			{ name: "totalWantLocked", returns: [parseEther("1")] },
-			{ name: "deposit", returns: [parseEther("1")] },
-			{ name: "withdraw", returns: [parseEther("1")] }
-		]);
-		contract = (await ethers
-			.getContractFactory(NAME_MASTER)
-			.then(factory =>
-				factory.deploy(
-					[
-						PAIRS["HYPR-WBNB"].address,
-						hypr.address,
-						devWallet.address,
-						feeBb.address,
-						feeSt.address
-					],
-					startBlock
-				)
-			)
-			.then(contract => contract.deployed())) as SpaceMaster;
-
-		await hypr["mint(uint256)"](parseEther(ETH_INITIAL_MINT)).then(wait);
-		await hypr.transferOwnership(contract.address).then(wait);
-		await want.mint(parseEther(ETH_INITIAL_MINT)).then(wait);
-	});
-
-	describe("setDevWalletAddress", () => {
-		it("should require from current dev wallet address", async () => {
-			// Assert
-			await expect(
-				contract.connect(user).setDevWalletAddress(user.address)
-			).to.be.revertedWith("SpaceMaster: dev: wut?");
-			expect(await contract.devWalletAdrs()).to.equal(devWallet.address);
-		});
-
-		it("should set dev wallet address", async () => {
-			// Act
-			const result = contract
-				.connect(devWallet)
-				.setDevWalletAddress(user.address);
-
-			// Assert
-			await expect(result)
-				.to.emit(contract, "SetDevWalletAddress")
-				.withArgs(devWallet.address, user.address);
-			await result.then(wait);
-			expect(await contract.devWalletAdrs()).to.equal(user.address);
-		});
-
-		after(async () => {
-			await contract
-				.connect(user)
-				.setDevWalletAddress(devWallet.address)
-				.then(wait);
-		});
-	});
-
-	describe("setFeeBbAddress", () => {
-		it("should require from current fee buybback address", async () => {
-			// Assert
-			await expect(
-				contract.connect(user).setFeeBbAddress(user.address)
-			).to.be.revertedWith("SpaceMaster: setFeeBbAddress: FORBIDDEN");
-			expect(await contract.feeBbAdrs()).to.equal(feeBb.address);
-		});
-
-		it("should set fee buyback address", async () => {
-			// Act
-			const result = contract
-				.connect(feeBb)
-				.setFeeBbAddress(user.address);
-
-			// Assert
-			await expect(result)
-				.to.emit(contract, "SetFeeBbAddress")
-				.withArgs(feeBb.address, user.address);
-			await result.then(wait);
-			expect(await contract.feeBbAdrs()).to.equal(user.address);
-		});
-
-		after(async () => {
-			await contract
-				.connect(user)
-				.setFeeBbAddress(feeBb.address)
-				.then(wait);
-		});
-	});
-
-	describe("setFeeStAddress", () => {
-		it("should require from current fee stake address", async () => {
-			// Assert
-			await expect(
-				contract.connect(user).setFeeStAddress(user.address)
-			).to.be.revertedWith("SpaceMaster: setFeeStAddress: FORBIDDEN");
-			expect(await contract.feeStAdrs()).to.equal(feeSt.address);
-		});
-
-		it("should set fee stake address", async () => {
-			// Act
-			const result = contract
-				.connect(feeSt)
-				.setFeeStAddress(user.address);
-
-			// Assert
-			await expect(result)
-				.to.emit(contract, "SetFeeStAddress")
-				.withArgs(feeSt.address, user.address);
-			await result.then(wait);
-			expect(await contract.feeStAdrs()).to.equal(user.address);
-		});
-
-		after(async () => {
-			await contract
-				.connect(user)
-				.setFeeStAddress(feeSt.address)
-				.then(wait);
-		});
+		snapshotId = await takeSnapshot();
 	});
 
 	describe("add", () => {
 		it("should require owner", async () => {
 			// Arrange
-			const strategy = STRATEGIES[0];
+			const {
+				SpaceMaster,
+				FarmCommander,
+				Accounts,
+				Strategy,
+				state
+			} = await fixture();
+			const { user } = Accounts;
+			const { totalAllocPoint, poolLength } = await state.SpaceMaster();
 
 			// Assert
 			await expect(
-				contract
-					.connect(user)
-					.add(
-						PAIRS[strategy.symbol].address,
-						FARMS[strategy.symbol].address,
-						strategy.weight.toString(),
-						strategy.fee ?? 0,
-						false,
-						false
-					)
-			).to.be.revertedWith("Ownable: caller is not the owner");
-		});
-
-		it("should add the pool without update", async () => {
-			// Arrange
-			const strategy = STRATEGIES[0];
-			const hyprDevWalletBal = await hypr.balanceOf(devWallet.address);
-
-			// Act
-			await contract
-				.add(
-					PAIRS[strategy.symbol].address,
-					FARMS[strategy.symbol].address,
-					strategy.weight.toString(),
-					strategy.fee ?? 0,
-					false,
+				SpaceMaster.connect(user).add(
+					Strategy.address,
+					FarmCommander.address,
+					Strategy.weight,
+					Strategy.harvestInterval,
+					Strategy.fee ?? 0,
 					false
 				)
-				.then(wait);
-
-			// Assert
-			await contract.poolInfo(0).then(info => {
-				expect(info.want).to.equal(PAIRS[strategy.symbol].address);
-				expect(info.strategy).to.equal(FARMS[strategy.symbol].address);
-				expect(info.allocPoint).to.equal(strategy.weight);
-				expect(info.accHYPRPerShare).to.equal(0);
-				expect(info.depositFeeBP).to.equal(strategy.fee ?? 0);
-			});
-
-			expect(await contract.totalAllocPoint()).to.equal(strategy.weight);
-			expect(await contract.poolLength()).to.equal(1);
-			expect(await hypr.balanceOf(devWallet.address)).to.equal(
-				hyprDevWalletBal
+			).to.be.revertedWith("Ownable: caller is not the owner");
+			expect(await SpaceMaster.totalAllocPoint()).to.equal(
+				totalAllocPoint
 			);
+			expect(await SpaceMaster.poolLength()).to.equal(poolLength);
 		});
 
-		it("should add the pool with update", async () => {
+		it("should require maximum deposit fee base point", async () => {
 			// Arrange
-			const strategy = STRATEGIES[1];
-			const hyprDevWalletBal = await hypr.balanceOf(devWallet.address);
-
-			await contract
-				.add(
-					want.address,
-					farm.address,
-					STRATEGIES[2].weight.toString(),
-					200,
-					false,
-					true
-				)
-				.then(wait);
-
-			// Act
-			await contract
-				.add(
-					PAIRS[strategy.symbol].address,
-					FARMS[strategy.symbol].address,
-					strategy.weight.toString(),
-					strategy.fee ?? 0,
-					false,
-					true
-				)
-				.then(wait);
+			const {
+				SpaceMaster,
+				FarmCommander,
+				Strategy,
+				state
+			} = await fixture();
+			const { totalAllocPoint, poolLength } = await state.SpaceMaster();
 
 			// Assert
-			expect(await hypr.balanceOf(devWallet.address)).to.be.gte(
-				hyprDevWalletBal
+			await expect(
+				SpaceMaster.add(
+					Strategy.address,
+					FarmCommander.address,
+					Strategy.weight,
+					Strategy.harvestInterval,
+					1001,
+					false
+				)
+			).to.be.revertedWith(
+				"SpaceMaster: add: invalid deposit fee basis points"
 			);
+			expect(await SpaceMaster.totalAllocPoint()).to.equal(
+				totalAllocPoint
+			);
+			expect(await SpaceMaster.poolLength()).to.equal(poolLength);
+		});
+
+		it("should require maximum harvest interval", async () => {
+			// Arrange
+			const {
+				SpaceMaster,
+				FarmCommander,
+				Strategy,
+				state
+			} = await fixture();
+			const { totalAllocPoint, poolLength } = await state.SpaceMaster();
+
+			// Assert
+			await expect(
+				SpaceMaster.add(
+					Strategy.address,
+					FarmCommander.address,
+					Strategy.weight,
+					DURATION.days(15),
+					Strategy.fee ?? 0,
+					false
+				)
+			).to.be.revertedWith("SpaceMaster: add: invalid harvest interval");
+			expect(await SpaceMaster.totalAllocPoint()).to.equal(
+				totalAllocPoint
+			);
+			expect(await SpaceMaster.poolLength()).to.equal(poolLength);
+		});
+
+		it("should add pool", async () => {
+			// Arrange
+			const {
+				SpaceMaster,
+				FarmCommander,
+				Strategy,
+				state
+			} = await fixture("BNB-BUSD LP");
+			const { totalAllocPoint, poolLength } = await state.SpaceMaster();
+
+			// Act
+			await SpaceMaster.add(
+				Strategy.address,
+				FarmCommander.address,
+				Strategy.weight,
+				Strategy.harvestInterval,
+				Strategy.fee ?? 0,
+				false
+			).then(wait);
+
+			// Assert
+			expect(await SpaceMaster.totalAllocPoint()).to.equal(
+				totalAllocPoint.add(Strategy.weight)
+			);
+			expect(await SpaceMaster.poolLength()).to.equal(
+				poolLength.add(constants.One)
+			);
+			await SpaceMaster.poolInfo(0).then(pool => {
+				expect(pool.want).to.equal(Strategy.address);
+				expect(pool.strategy).to.equal(FarmCommander.address);
+				expect(pool.allocPoint).to.equal(Strategy.weight);
+				expect(pool.accHYPRPerShare).to.equal(0);
+				expect(pool.harvestInterval).to.equal(Strategy.harvestInterval);
+				expect(pool.depositFeeBP).to.equal(Strategy.fee ?? 0);
+			});
 		});
 	});
 
 	describe("set", () => {
 		it("should require owner", async () => {
 			// Arrange
-			const strategy = STRATEGIES[0];
+			const { SpaceMaster, Strategy, Accounts, state } = await fixture();
+			const { totalAllocPoint, poolLength } = await state.SpaceMaster();
+			const { user } = Accounts;
 
 			// Assert
 			await expect(
-				contract
-					.connect(user)
-					.set(
-						0,
-						strategy.weight.toString(),
-						strategy.fee ?? 0,
-						false
-					)
+				SpaceMaster.connect(user).set(
+					0,
+					Strategy.weight,
+					Strategy.harvestInterval,
+					Strategy.fee ?? 0,
+					false
+				)
 			).to.be.revertedWith("Ownable: caller is not the owner");
+			expect(await SpaceMaster.totalAllocPoint()).to.equal(
+				totalAllocPoint
+			);
+			expect(await SpaceMaster.poolLength()).to.equal(poolLength);
 		});
 
 		it("should require existing pool", async () => {
 			// Arrange
-			const strategy = STRATEGIES[0];
+			const { SpaceMaster, Strategy, state } = await fixture();
+			const { totalAllocPoint, poolLength } = await state.SpaceMaster();
 
 			// Assert
 			await expect(
-				contract.set(
-					999,
-					strategy.weight.toString(),
-					strategy.fee ?? 0,
+				SpaceMaster.set(
+					99,
+					Strategy.weight,
+					Strategy.harvestInterval,
+					Strategy.fee ?? 0,
 					false
 				)
 			).to.be.revertedWith("SpaceMaster: pool inexistent");
+			expect(await SpaceMaster.totalAllocPoint()).to.equal(
+				totalAllocPoint
+			);
+			expect(await SpaceMaster.poolLength()).to.equal(poolLength);
 		});
 
-		it("should set the pool without update", async () => {
+		it("should require maximum deposit fee base point", async () => {
 			// Arrange
-			const newWeight = getWeight(19);
-			const newFee = 1;
-			const hyprDevWalletBal = await hypr.balanceOf(devWallet.address);
-
-			// Act
-			await contract
-				.set(0, newWeight.toString(), newFee, false)
-				.then(wait);
+			const { SpaceMaster, Strategy, state } = await fixture();
+			const { totalAllocPoint, poolLength } = await state.SpaceMaster();
 
 			// Assert
-			await contract.poolInfo(0).then(info => {
-				expect(info.allocPoint).to.equal(newWeight);
-				expect(info.depositFeeBP).to.equal(newFee);
+			await expect(
+				SpaceMaster.set(
+					0,
+					STRATEGIES[1].weight,
+					STRATEGIES[1].harvestInterval,
+					1001,
+					false
+				)
+			).to.be.revertedWith(
+				"SpaceMaster: add: invalid deposit fee basis points"
+			);
+			await SpaceMaster.poolInfo(0).then(pool => {
+				expect(pool.allocPoint).to.equal(Strategy.weight);
+				expect(pool.harvestInterval).to.equal(Strategy.harvestInterval);
+				expect(pool.depositFeeBP).to.equal(Strategy.fee ?? 0);
 			});
-
-			expect(await contract.totalAllocPoint()).to.equal(
-				await contract
-					.totalAllocPoint()
-					.then(totalAllocPoint =>
-						contract
-							.poolInfo(0)
-							.then(poolInfo =>
-								totalAllocPoint
-									.sub(poolInfo.allocPoint)
-									.add(newWeight)
-							)
-					)
+			expect(await SpaceMaster.totalAllocPoint()).to.equal(
+				totalAllocPoint
 			);
-			expect(await hypr.balanceOf(devWallet.address)).to.equal(
-				hyprDevWalletBal
-			);
+			expect(await SpaceMaster.poolLength()).to.equal(poolLength);
 		});
 
-		it("should set the pool with update", async () => {
+		it("should require maximum harvest interval", async () => {
 			// Arrange
-			const newWeight = getWeight(3);
-			const newFee = 1;
-			const hyprDevWalletBal = await hypr.balanceOf(devWallet.address);
-
-			// Act
-			await contract
-				.set(0, newWeight.toString(), newFee, false)
-				.then(wait);
+			const { SpaceMaster, Strategy, state } = await fixture();
+			const { totalAllocPoint, poolLength } = await state.SpaceMaster();
 
 			// Assert
-			expect(await hypr.balanceOf(devWallet.address)).to.be.gte(
-				hyprDevWalletBal
+			await expect(
+				SpaceMaster.set(
+					0,
+					STRATEGIES[1].weight,
+					DURATION.days(15),
+					STRATEGIES[1].fee ?? 0,
+					false
+				)
+			).to.be.revertedWith("SpaceMaster: add: invalid harvest interval");
+			await SpaceMaster.poolInfo(0).then(pool => {
+				expect(pool.allocPoint).to.equal(Strategy.weight);
+				expect(pool.harvestInterval).to.equal(Strategy.harvestInterval);
+				expect(pool.depositFeeBP).to.equal(Strategy.fee ?? 0);
+			});
+			expect(await SpaceMaster.totalAllocPoint()).to.equal(
+				totalAllocPoint
 			);
+			expect(await SpaceMaster.poolLength()).to.equal(poolLength);
+		});
+
+		it("should set pool", async () => {
+			// Arrange
+			const { SpaceMaster, Strategy, state } = await fixture(
+				"BNB-BUSD LP"
+			);
+			const { totalAllocPoint, poolLength } = await state.SpaceMaster();
+
+			// Act
+			await SpaceMaster.set(
+				0,
+				STRATEGIES[1].weight,
+				STRATEGIES[1].harvestInterval,
+				STRATEGIES[1].fee ?? 0,
+				false
+			).then(wait);
+
+			// Assert
+			await SpaceMaster.poolInfo(0).then(pool => {
+				expect(pool.allocPoint).to.equal(STRATEGIES[1].weight);
+				expect(pool.harvestInterval).to.equal(
+					STRATEGIES[1].harvestInterval
+				);
+				expect(pool.depositFeeBP).to.equal(STRATEGIES[1].fee ?? 0);
+			});
+			expect(await SpaceMaster.totalAllocPoint()).to.equal(
+				totalAllocPoint.sub(Strategy.weight).add(STRATEGIES[1].weight)
+			);
+			expect(await SpaceMaster.poolLength()).to.equal(poolLength);
 		});
 	});
 
 	describe("deposit", () => {
 		it("should require existing pool", async () => {
+			// Arrange
+			const { SpaceMaster } = await fixture();
+
 			// Assert
 			await expect(
-				contract.deposit(999, parseEther("1"))
+				SpaceMaster.deposit(99, parseEther("1"))
 			).to.be.revertedWith("SpaceMaster: pool inexistent");
 		});
 
-		it("should deposit", async () => {
+		it("should perform basic deposit", async () => {
 			// Arrange
-			const hyprDevWalletBal = await hypr.balanceOf(devWallet.address);
-			const wantDeployerBal = await want.balanceOf(deployer.address);
+			const {
+				SpaceMaster,
+				FarmCommander,
+				Pair,
+				Accounts,
+				Strategy,
+				state
+			} = await fixture("BNB-BUSD LP");
+			const { deployer } = Accounts;
+			const [
+				pairMasterBal,
+				pairCmdrBal,
+				pairUserBal,
+				pairFarmBal
+			] = await getBalance({
+				[SpaceMaster.address]: Pair,
+				[FarmCommander.address]: Pair,
+				[deployer.address]: Pair,
+				[process.env.ADRS_FARM ?? constants.AddressZero]: Pair
+			});
+			const { getPoolInfo } = await state.SpaceMaster();
+			const { user } = await getPoolInfo(0);
+			const amount = parseEther("1");
 
-			await want.increaseAllowance(contract.address, parseEther("1"));
+			await SpaceMaster.set(
+				0,
+				Strategy.weight,
+				Strategy.harvestInterval,
+				0,
+				false
+			).then(wait);
 
 			// Act
-			const result = contract.deposit(1, parseEther("1"));
+			const result = SpaceMaster.deposit(0, amount);
 
 			// Assert
 			await expect(result)
-				.to.emit(contract, "Deposit")
-				.withArgs(deployer.address, 1, parseEther("1"));
+				.to.emit(SpaceMaster, "Deposit")
+				.withArgs(deployer.address, 0, amount);
+			await result.then(async tx => {
+				const { timestamp } = await tx
+					.wait()
+					.then(res => ethers.provider.getBlock(res.blockHash));
 
+				return SpaceMaster.userInfo(0, deployer.address).then(
+					userInfo =>
+						SpaceMaster.poolInfo(0).then(pool => {
+							expect(userInfo.amount).to.equal(
+								user.amount.add(amount)
+							);
+							expect(userInfo.rewardDebt).to.equal(
+								user.amount
+									.add(amount)
+									.mul(pool.accHYPRPerShare)
+									.div(1e12)
+							);
+							expect(userInfo.nextHarvestUntil).to.equal(
+								pool.harvestInterval.add(timestamp)
+							);
+						})
+				);
+			});
+			expect(await getBalance(SpaceMaster.address, Pair)).to.equal(
+				pairMasterBal
+			);
+			expect(await getBalance(FarmCommander.address, Pair)).to.equal(
+				pairCmdrBal
+			);
+			expect(await getBalance(deployer.address, Pair)).to.equal(
+				pairUserBal.sub(amount)
+			);
+			expect(
+				await getBalance(
+					process.env.ADRS_FARM ?? constants.AddressZero,
+					Pair
+				)
+			).to.equal(pairFarmBal.add(amount));
+		});
+
+		it("should perform deposit and set locked up rewards and transfer fees", async () => {
+			// Arrange
+			const { SpaceMaster, Pair, Accounts, state } = await fixture(
+				"BNB-BUSD LP"
+			);
+			const { deployer, masterFeeBb, masterFeeSt } = Accounts;
+			const amount = parseEther("1");
+
+			await SpaceMaster.deposit(0, amount).then(wait);
+
+			const { calcFee, getPoolInfo } = await state.SpaceMaster();
+			const { totalLockedUpRewards, user } = await getPoolInfo(0);
+			const [pairFeeBbBal, pairFeeStBal] = await getBalance({
+				[masterFeeBb.address]: Pair,
+				[masterFeeSt.address]: Pair
+			});
+			const depositFee = calcFee(amount);
+
+			// Act
+			const result = SpaceMaster.deposit(0, amount);
+
+			// Assert
+			await expect(result)
+				.to.emit(SpaceMaster, "RewardLockedUp")
+				.withArgs(deployer.address, 0, user.pending);
 			await result.then(wait);
-			await contract
-				.userInfo(1, deployer.address)
-				.then(async userInfo => {
-					expect(userInfo.amount).to.equal(parseEther("1"));
-					expect(userInfo.rewardDebt).to.equal(
-						userInfo.amount
-							.mul(
-								await contract
-									.poolInfo(1)
-									.then(poolInfo => poolInfo.accHYPRPerShare)
-							)
-							.div(1e12)
-					);
-				});
+			expect(await getBalance(masterFeeBb.address, Pair)).to.equal(
+				pairFeeBbBal.add(depositFee.div(2))
+			);
+			expect(await getBalance(masterFeeSt.address, Pair)).to.equal(
+				pairFeeStBal.add(depositFee.sub(depositFee.div(2)))
+			);
+			expect(await SpaceMaster.totalLockedUpRewards()).to.equal(
+				totalLockedUpRewards.add(user.pending)
+			);
+			await SpaceMaster.userInfo(0, deployer.address).then(userInfo => {
+				expect(userInfo.amount).to.equal(
+					user.amount.add(amount.sub(depositFee))
+				);
+				expect(userInfo.rewardLockedUp).to.equal(
+					user.rewardLockedUp.add(user.pending)
+				);
+			});
+		});
 
-			expect(await hypr.balanceOf(devWallet.address)).to.be.gte(
-				hyprDevWalletBal
-			);
-			expect(await want.balanceOf(deployer.address)).to.be.lte(
-				wantDeployerBal
-			);
-			expect(await want.balanceOf(feeBb.address)).to.equal(
-				parseEther("0.01")
-			);
-			expect(await want.balanceOf(feeSt.address)).to.equal(
-				parseEther("0.01")
+		it("should perform deposit and harvest rewards", async () => {
+			// Arrange
+			const {
+				HyperToken,
+				SpaceMaster,
+				Accounts,
+				Strategy,
+				state
+			} = await fixture("BNB-BUSD LP");
+			const { deployer } = Accounts;
+			const amount = parseEther("1");
+
+			await SpaceMaster.deposit(0, amount).then(wait);
+			await increase(Strategy.harvestInterval.add(DURATION.hours(1)));
+
+			const hyprUserBal = await getBalance(deployer.address, HyperToken);
+			const {
+				totalLockedUpRewards,
+				getPoolInfo
+			} = await state.SpaceMaster();
+			const { pool, user } = await getPoolInfo(0);
+
+			// Act
+			const result = SpaceMaster.deposit(0, amount);
+
+			// Assert
+			await result.then(async tx => {
+				const { timestamp } = await tx
+					.wait()
+					.then(res => ethers.provider.getBlock(res.blockHash));
+
+				return SpaceMaster.userInfo(0, deployer.address).then(
+					async user => {
+						expect(
+							await SpaceMaster.totalLockedUpRewards()
+						).to.equal(
+							totalLockedUpRewards.sub(user.rewardLockedUp)
+						);
+						expect(user.rewardLockedUp).to.equal(constants.Zero);
+						expect(user.nextHarvestUntil).to.equal(
+							pool.harvestInterval.add(timestamp)
+						);
+					}
+				);
+			});
+			expect(await getBalance(deployer.address, HyperToken)).to.equal(
+				hyprUserBal.add(user.pending.add(user.rewardLockedUp))
 			);
 		});
 	});
 
 	describe("withdraw", () => {
 		it("should require existing pool", async () => {
+			// Arrange
+			const { SpaceMaster } = await fixture();
+
 			// Assert
 			await expect(
-				contract.withdraw(999, parseEther("1"))
+				SpaceMaster.withdraw(99, parseEther("1"))
 			).to.be.revertedWith("SpaceMaster: pool inexistent");
 		});
 
-		it("should require user amount", async () => {
-			await expect(
-				contract.withdraw(0, parseEther("1"))
-			).to.be.revertedWith("SpaceMaster: user.amount is 0");
-		});
-
-		it("should withdraw", async () => {
+		it("should require user to have amount", async () => {
 			// Arrange
-			const hyprDevWalletBal = await hypr.balanceOf(devWallet.address);
-			const wantDeployerBal = await want.balanceOf(deployer.address);
-			const wantMasterBal = await want.balanceOf(contract.address);
-
-			// Act
-			const result = contract.withdraw(1, parseEther("1"));
+			const { SpaceMaster } = await fixture();
+			const amount = constants.Zero;
 
 			// Assert
-			await expect(result)
-				.to.emit(contract, "Withdraw")
-				.withArgs(deployer.address, 1, wantMasterBal);
+			await expect(SpaceMaster.withdraw(0, amount)).to.be.revertedWith(
+				"SpaceMaster: user.amount is 0"
+			);
+		});
 
-			await result.then(wait);
-			await contract.userInfo(1, deployer.address).then(userInfo => {
-				expect(userInfo.amount).to.equal(constants.Zero);
-				expect(userInfo.rewardDebt).to.equal(constants.Zero);
+		it("should require total want locked to have amount", async () => {
+			// Arrange
+			const { SpaceMaster, Pair, Strategy, Accounts } = await fixture(
+				"BNB-BUSD LP"
+			);
+			const { deployer } = Accounts;
+			const FarmCommander = await mockFarmCommander(deployer, [
+				{ name: "totalWantLocked", returns: [constants.Zero] },
+				{ name: "deposit", returns: [parseEther("1")] },
+				{ name: "withdraw", returns: [parseEther("1")] }
+			]);
+			const amount = parseEther("1");
+
+			await SpaceMaster.add(
+				Pair.address,
+				FarmCommander.address,
+				Strategy.weight,
+				Strategy.harvestInterval,
+				Strategy.fee ?? 0,
+				false
+			).then(wait);
+			await SpaceMaster.deposit(1, amount);
+
+			// Assert
+			await expect(SpaceMaster.withdraw(1, amount)).to.be.revertedWith(
+				"SpaceMaster: total is 0"
+			);
+		});
+
+		it("should perform withdraw and harvest rewards", async () => {
+			// Arrange
+			const { HyperToken, SpaceMaster, Accounts, state } = await fixture(
+				"BNB-BUSD LP"
+			);
+			const { deployer } = Accounts;
+			const amount = parseEther("1");
+
+			await SpaceMaster.deposit(0, amount).then(wait);
+			await increase(DURATION.hours(13));
+
+			const {
+				totalLockedUpRewards,
+				getPoolInfo
+			} = await state.SpaceMaster();
+			const { pool, user } = await getPoolInfo(0);
+			const hyprUserBal = await getBalance(deployer.address, HyperToken);
+
+			// Act
+			const result = SpaceMaster.withdraw(0, amount);
+
+			// Assert
+			await result.then(async tx => {
+				const { timestamp } = await tx
+					.wait()
+					.then(res => ethers.provider.getBlock(res.blockHash));
+
+				return SpaceMaster.userInfo(0, deployer.address).then(
+					async user => {
+						expect(
+							await SpaceMaster.totalLockedUpRewards()
+						).to.equal(
+							totalLockedUpRewards.sub(user.rewardLockedUp)
+						);
+						expect(user.rewardLockedUp).to.equal(constants.Zero);
+						expect(user.nextHarvestUntil).to.equal(
+							pool.harvestInterval.add(timestamp)
+						);
+					}
+				);
 			});
-
-			expect(await hypr.balanceOf(devWallet.address)).to.be.gte(
-				hyprDevWalletBal
-			);
-			expect(await want.balanceOf(deployer.address)).to.equal(
-				wantDeployerBal.add(wantMasterBal)
-			);
-			expect(await want.balanceOf(contract.address)).to.equal(
-				constants.Zero
+			expect(await getBalance(deployer.address, HyperToken)).to.equal(
+				hyprUserBal.add(user.pending.add(user.rewardLockedUp))
 			);
 		});
 	});
 
 	describe("emergencyWithdraw", () => {
 		it("should require existing pool", async () => {
+			// Arrange
+			const { SpaceMaster } = await fixture();
+
 			// Assert
-			await expect(contract.emergencyWithdraw(999)).to.be.revertedWith(
+			await expect(SpaceMaster.emergencyWithdraw(99)).to.be.revertedWith(
 				"SpaceMaster: pool inexistent"
 			);
 		});
 
-		it("should emergency withdraw", async () => {
+		it("should perform emergency withdraw", async () => {
 			// Arrange
-			const userAmount = await contract
-				.userInfo(1, deployer.address)
-				.then(userInfo => userInfo.amount);
+			const { SpaceMaster, Pair, Accounts, state } = await fixture(
+				"BNB-BUSD LP"
+			);
+			const { deployer } = Accounts;
+			const amount = parseEther("1");
+
+			await SpaceMaster.deposit(0, amount).then(wait);
+
+			const { calcFee } = await state.SpaceMaster();
+			const [pairUserBal, pairFarmBal] = await getBalance({
+				[deployer.address]: Pair,
+				[process.env.ADRS_FARM ?? constants.AddressZero]: Pair
+			});
 
 			// Act
-			const result = contract.emergencyWithdraw(1);
+			const result = SpaceMaster.emergencyWithdraw(0);
 
 			// Assert
 			await expect(result)
-				.to.emit(contract, "EmergencyWithdraw")
-				.withArgs(deployer.address, 1, userAmount);
+				.to.emit(SpaceMaster, "EmergencyWithdraw")
+				.withArgs(deployer.address, 0, amount.sub(calcFee(amount)));
 			await result.then(wait);
-			await contract.userInfo(1, deployer.address).then(userInfo => {
-				expect(userInfo.amount).to.equal(constants.Zero);
-				expect(userInfo.rewardDebt).to.equal(constants.Zero);
+			await SpaceMaster.userInfo(0, deployer.address).then(user => {
+				expect(user.amount).to.equal(constants.Zero);
+				expect(user.rewardDebt).to.equal(constants.Zero);
+				expect(user.rewardLockedUp).to.equal(constants.Zero);
+				expect(user.nextHarvestUntil).to.equal(constants.Zero);
+			});
+			expect(await getBalance(deployer.address, Pair)).to.equal(
+				pairUserBal.add(amount.sub(calcFee(amount)))
+			);
+			expect(
+				await getBalance(
+					process.env.ADRS_FARM ?? constants.AddressZero,
+					Pair
+				)
+			).to.equal(pairFarmBal.sub(amount.sub(calcFee(amount))));
+		});
+	});
+
+	describe("updatePool", () => {
+		it("should exit if total want locked is zero", async () => {
+			// Arrange
+			const {
+				HyperToken,
+				SpaceMaster,
+				Pair,
+				Accounts,
+				Strategy
+			} = await fixture("BNB-BUSD LP");
+			const { deployer } = Accounts;
+			const FarmCommander = await mockFarmCommander(deployer, [
+				{ name: "totalWantLocked", returns: [constants.Zero] },
+				{ name: "deposit", returns: [parseEther("1")] },
+				{ name: "withdraw", returns: [parseEther("1")] }
+			]);
+
+			await SpaceMaster.add(
+				Pair.address,
+				FarmCommander.address,
+				Strategy.weight,
+				Strategy.harvestInterval,
+				Strategy.fee ?? 0,
+				false
+			).then(wait);
+
+			const blockNumber = await getBlockNumber();
+			const hyprMasterBal = await getBalance(
+				SpaceMaster.address,
+				HyperToken
+			);
+
+			// Act
+			await SpaceMaster.updatePool(1).then(wait);
+
+			// Assert
+			expect(await getBalance(SpaceMaster.address, HyperToken)).to.equal(
+				hyprMasterBal
+			);
+			expect(
+				await SpaceMaster.poolInfo(1).then(pool => pool.lastRewardBlock)
+			).to.be.gt(blockNumber);
+		});
+
+		it("should update pool", async () => {
+			// Arrange
+			const { HyperToken, SpaceMaster, Accounts, state } = await fixture(
+				"BNB-BUSD LP"
+			);
+			const { devWallet } = Accounts;
+
+			await SpaceMaster.deposit(0, parseEther("1")).then(wait);
+
+			const blockNumber = await getBlockNumber();
+			const {
+				hyprDevReward,
+				hyprReward,
+				pool
+			} = await state.SpaceMaster().then(s => s.getPoolInfo(0));
+			const { totalWantLocked } = await state.FarmCommander();
+			const [hyprDevWalletBal, hyprMasterBal] = await getBalance({
+				[devWallet.address]: HyperToken,
+				[SpaceMaster.address]: HyperToken
+			});
+
+			// Act
+			await SpaceMaster.updatePool(0).then(wait);
+
+			// Assert
+			expect(await getBalance(devWallet.address, HyperToken)).to.equal(
+				hyprDevWalletBal.add(hyprDevReward)
+			);
+			expect(await getBalance(SpaceMaster.address, HyperToken)).to.equal(
+				hyprMasterBal.add(hyprReward)
+			);
+			await SpaceMaster.poolInfo(0).then(poolInfo => {
+				expect(poolInfo.accHYPRPerShare).to.equal(
+					pool.accHYPRPerShare.add(
+						hyprReward.mul(1e12).div(totalWantLocked)
+					)
+				);
+				expect(poolInfo.lastRewardBlock).to.be.gte(blockNumber);
 			});
 		});
 	});
 
 	describe("getPendingHYPR", () => {
-		it("should pending HYPR", async () => {
-			expect(await contract.getPendingHYPR(1, deployer.address)).to.equal(
-				constants.Zero
-			);
-		});
-	});
+		it("should return pending", async () => {
+			// Arrange
+			const { SpaceMaster, Accounts } = await fixture("BNB-BUSD LP");
+			const { deployer } = Accounts;
+			const amount = parseEther("1");
 
-	describe("getStakedWantTokens", () => {
-		it("should require strategy to be comp", async () => {
-			await expect(
-				contract.getStakedWantTokens(1, deployer.address)
-			).to.be.revertedWith("SpaceMaster: !isComp");
-		});
-	});
+			await SpaceMaster.deposit(0, amount).then(wait);
+			await increase(DURATION.days(1));
 
-	describe("transferLiquidity", () => {
-		it("should require owner", async () => {
-			// Assert
-			await expect(
-				contract.connect(user).transferLiquidity(user.address)
-			).to.be.revertedWith("Ownable: caller is not the owner");
+			expect(
+				await SpaceMaster.getPendingHYPR(0, deployer.address)
+			).to.be.gt(constants.Zero);
 		});
 	});
 
 	describe("inCaseTokensGetStuck", () => {
 		it("should require owner", async () => {
+			// Arrange
+			const { SpaceMaster, Accounts } = await fixture();
+			const { user } = Accounts;
+
 			// Assert
 			await expect(
-				contract
-					.connect(user)
-					.inCaseTokensGetStuck(constants.AddressZero, 0)
+				SpaceMaster.connect(user).inCaseTokensGetStuck(
+					constants.AddressZero,
+					constants.Zero
+				)
 			).to.be.revertedWith("Ownable: caller is not the owner");
 		});
 
-		it("should require token address to not be HYPR", async () => {
+		it("should revert if token is HYPR", async () => {
+			// Arrange
+			const { HyperToken, SpaceMaster } = await fixture();
+
 			// Assert
 			await expect(
-				contract.inCaseTokensGetStuck(hypr.address, 0)
+				SpaceMaster.inCaseTokensGetStuck(
+					HyperToken.address,
+					constants.Zero
+				)
 			).to.be.revertedWith("SpaceMaster: !safe");
 		});
 	});
 
-	describe("updatePool", () => {
-		it("should update pool", async () => {
+	describe("setDevWalletAddress", () => {
+		it("should require from current dev wallet address", async () => {
 			// Arrange
-			const hyprDevWalletBal = await hypr.balanceOf(devWallet.address);
-			const hyprMasterBal = await hypr.balanceOf(contract.address);
-			const poolInfo = await contract
-				.poolInfo(1)
-				.then(poolInfo => [
-					poolInfo.accHYPRPerShare,
-					poolInfo.lastRewardBlock
-				]);
-
-			// Act
-			await contract.updatePool(1);
+			const { SpaceMaster, Accounts } = await fixture();
+			const { devWallet, user } = Accounts;
 
 			// Assert
-			expect(await hypr.balanceOf(devWallet.address)).to.be.gte(
-				hyprDevWalletBal
+			await expect(
+				SpaceMaster.connect(user).setDevWalletAddress(user.address)
+			).to.be.revertedWith("SpaceMaster: dev: wut?");
+			expect(await SpaceMaster.devWalletAdrs()).to.equal(
+				devWallet.address
 			);
-			expect(await hypr.balanceOf(contract.address)).to.be.gte(
-				hyprMasterBal
-			);
-			await contract.poolInfo(1).then(p => {
-				expect(p.accHYPRPerShare).to.be.gte(poolInfo[0]);
-				expect(p.lastRewardBlock).to.be.gte(poolInfo[1]);
-			});
 		});
+
+		it("should set dev wallet address", async () => {
+			// Arrange
+			const { SpaceMaster, Accounts } = await fixture();
+			const { devWallet, user } = Accounts;
+
+			// Act
+			const result = SpaceMaster.connect(devWallet).setDevWalletAddress(
+				user.address
+			);
+
+			// Assert
+			await expect(result)
+				.to.emit(SpaceMaster, "SetDevWalletAddress")
+				.withArgs(devWallet.address, user.address);
+			await result.then(wait);
+			expect(await SpaceMaster.devWalletAdrs()).to.equal(user.address);
+		});
+	});
+
+	describe("setFeeBbAddress", () => {
+		it("should require from current fee buybback address", async () => {
+			// Arrange
+			const { SpaceMaster, Accounts } = await fixture();
+			const { masterFeeBb, user } = Accounts;
+
+			// Assert
+			await expect(
+				SpaceMaster.connect(user).setFeeBbAddress(user.address)
+			).to.be.revertedWith("SpaceMaster: setFeeBbAddress: FORBIDDEN");
+			expect(await SpaceMaster.feeBbAdrs()).to.equal(masterFeeBb.address);
+		});
+
+		it("should set fee buyback address", async () => {
+			// Arrange
+			const { SpaceMaster, Accounts } = await fixture();
+			const { masterFeeBb, user } = Accounts;
+
+			// Act
+			const result = SpaceMaster.connect(masterFeeBb).setFeeBbAddress(
+				user.address
+			);
+
+			// Assert
+			await expect(result)
+				.to.emit(SpaceMaster, "SetFeeBbAddress")
+				.withArgs(masterFeeBb.address, user.address);
+			await result.then(wait);
+			expect(await SpaceMaster.feeBbAdrs()).to.equal(user.address);
+		});
+	});
+
+	describe("setFeeStAddress", () => {
+		it("should require from current fee stake address", async () => {
+			// Arrange
+			const { SpaceMaster, Accounts } = await fixture();
+			const { masterFeeSt, user } = Accounts;
+
+			// Assert
+			await expect(
+				SpaceMaster.connect(user).setFeeStAddress(user.address)
+			).to.be.revertedWith("SpaceMaster: setFeeStAddress: FORBIDDEN");
+			expect(await SpaceMaster.feeStAdrs()).to.equal(masterFeeSt.address);
+		});
+
+		it("should set fee stake address", async () => {
+			// Arrange
+			const { SpaceMaster, Accounts } = await fixture();
+			const { masterFeeSt, user } = Accounts;
+
+			// Act
+			const result = SpaceMaster.connect(masterFeeSt).setFeeStAddress(
+				user.address
+			);
+
+			// Assert
+			await expect(result)
+				.to.emit(SpaceMaster, "SetFeeStAddress")
+				.withArgs(masterFeeSt.address, user.address);
+			await result.then(wait);
+			expect(await SpaceMaster.feeStAdrs()).to.equal(user.address);
+		});
+	});
+
+	after(async () => {
+		await revertToSnapShot(snapshotId);
 	});
 });

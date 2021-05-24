@@ -1,6 +1,6 @@
 import axios, { AxiosResponse } from "axios";
 import { ethers } from "hardhat";
-import { Contract } from "@ethersproject/contracts";
+import { BigNumber, Contract } from "ethers";
 import secrets from "../secrets.json";
 
 export const getRemoteContract = <TContract = Contract>(
@@ -30,6 +30,11 @@ export const getRemoteContract = <TContract = Contract>(
 					)
 			: resolve(null)
 	);
+
+export const getBlockNumber = (): Promise<BigNumber> =>
+	ethers.provider
+		.send("eth_blockNumber", [])
+		.then(val => BigNumber.from(val));
 
 export const wait = <
 	TReceipt,

@@ -30,20 +30,18 @@ const config: HardhatUserConfig = {
 	defaultNetwork: "hardhat",
 	networks: {
 		localhost: {
-			blockGasLimit: 12e6,
-			gas: 12e6
+			gasPrice: 0
 		},
 		hardhat: {
 			forking: {
 				enabled: process.env.FORKING === "true",
-				url: "https://bsc-dataseed.binance.org"
-				// url: "https://bsc-dataseed1.defibit.io"
+				// url: "https://bsc-dataseed.binance.org"
+				url: "https://bsc-dataseed1.defibit.io"
 				// url: "https://bsc-dataseed1.ninicoin.io"
 			},
 			accounts,
 			allowUnlimitedContractSize: true,
-			blockGasLimit: 12e6,
-			gas: 12e6,
+			gasPrice: 0,
 			chainId: 31337,
 			tags: ["test", "local"]
 		},

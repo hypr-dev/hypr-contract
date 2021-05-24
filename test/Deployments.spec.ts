@@ -4,13 +4,14 @@ import chaiAsPromised from "chai-as-promised";
 import { solidity } from "ethereum-waffle";
 import { ethers } from "hardhat";
 import { constants } from "ethers";
+import { parseEther } from "ethers/lib/utils";
+import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import {
 	HyperToken,
 	SpaceMaster,
 	FarmCommander,
 	TimelockController
 } from "../build/types";
-import { AddressJson, EthersGetContract } from "../types";
 import {
 	ETH_INITIAL_MINT,
 	DEFAULT_FILENAME_PAIRS,
@@ -21,8 +22,7 @@ import {
 	NAME_TIMELOCK,
 	NAME_FARM
 } from "../constants";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import { parseEther } from "@ethersproject/units";
+import { revertToSnapShot, takeSnapshot } from "./utils";
 
 chai.use(chaiAsPromised);
 chai.use(solidity);
@@ -43,9 +43,11 @@ describe("Deployments", () => {
 	let deployer: SignerWithAddress,
 		hypr: HyperToken,
 		master: SpaceMaster,
-		timelock: TimelockController;
+		timelock: TimelockController,
+		snapshotId: string;
 
 	before(async () => {
+		snapshotId = await takeSnapshot();
 		[deployer] = await ethers.getSigners();
 		hypr = await (ethers as EthersGetContract<HyperToken>).getContract(
 			NAME_TOKEN
@@ -61,9 +63,9 @@ describe("Deployments", () => {
 	describe(NAME_TOKEN, () => {
 		it("should have correct name and symbol and decimal", async () => {
 			// Assert
-			await expect(hypr.name()).to.eventually.equal("hyperspace.finance");
-			await expect(hypr.symbol()).to.eventually.equal("HYPR");
-			await expect(hypr.decimals()).to.eventually.equal(18);
+			expect(await hypr.name()).to.equal("hyperspace.finance");
+			expect(await hypr.symbol()).to.equal("HYPR");
+			expect(await hypr.decimals()).to.equal(18);
 		});
 
 		it("should have minted initial amount", async () => {
@@ -75,13 +77,13 @@ describe("Deployments", () => {
 
 		it("should have SpaceMaster as owner", async () => {
 			// Assert
-			await expect(hypr.owner()).to.eventually.equal(master.address);
+			expect(await hypr.owner()).to.equal(master.address);
 		});
 	});
 
 	describe("Pairs", () => {
 		const strategies = STRATEGIES.filter(
-			strategy => !strategy.isHYPRComp && !strategy.isComp
+			strategy => !strategy.isHYPRComp && strategy.type !== "comp"
 		);
 
 		it("should have created pairs", async () => {
@@ -99,142 +101,128 @@ describe("Deployments", () => {
 	describe(NAME_MASTER, () => {
 		it("should have correct addresses", async () => {
 			// Assert
-			await expect(master.lpAdrs()).to.eventually.equal(
-				PAIRS["HYPR-WBNB"].address
-			);
-			await expect(master.hyprAdrs()).to.eventually.equal(hypr.address);
-			await expect(master.devWalletAdrs()).to.eventually.equal(
-				deployer.address
-			);
-			await expect(master.feeBbAdrs()).to.eventually.equal(
-				deployer.address
-			);
-			await expect(master.feeStAdrs()).to.eventually.equal(
-				deployer.address
-			);
+			expect(await master.hyprAdrs()).to.equal(hypr.address);
+			expect(await master.devWalletAdrs()).to.equal(deployer.address);
+			expect(await master.feeBbAdrs()).to.equal(deployer.address);
+			expect(await master.feeStAdrs()).to.equal(deployer.address);
 		});
 
 		it("should have TimelockController as owner", async () => {
 			// Assert
-			await expect(master.owner()).to.eventually.equal(timelock.address);
+			expect(await master.owner()).to.equal(timelock.address);
 		});
 	});
 
 	describe(NAME_FARM, () => {
 		it("should have correct addresses", async () => {
 			// Arrange
-			const farmKeys: (keyof typeof FARMS)[] = Object.keys(FARMS);
+			const strategies = STRATEGIES.filter(
+				strategy => strategy.type === "farm"
+			);
 
 			// Assert
-			for (let i = 0, n = farmKeys.length; i < n; i++) {
-				const strategy = STRATEGIES[i];
+			for (let i = 0, n = strategies.length; i < n; i++) {
+				const strategy = strategies[i];
 				const pair = PAIRS[strategy.symbol];
-				const farm = FARMS[farmKeys[i]];
+				const farm = FARMS[strategy.symbol];
 				const contract = (await ethers.getContractAt(
 					NAME_FARM,
 					farm.address
 				)) as FarmCommander;
 
-				await expect(contract.hyprAdrs()).to.eventually.equal(
-					hypr.address
-				);
-				await expect(contract.wantAdrs()).to.eventually.equal(
+				expect(await contract.hyprAdrs()).to.equal(hypr.address);
+				expect(await contract.wantAdrs()).to.equal(
 					strategy.isHYPRComp ? strategy.address : pair.address
 				);
-				await expect(contract.wbnbAdrs()).to.eventually.equal(
-					process.env.WBNB
+				expect(await contract.wbnbAdrs()).to.equal(
+					process.env.ADRS_WBNB
 				);
-				await expect(contract.masterAdrs()).to.eventually.equal(
-					master.address
+				expect(await contract.masterAdrs()).to.equal(master.address);
+				expect(await contract.earnedAdrs()).to.equal(
+					process.env.ADRS_CAKE
 				);
-				await expect(contract.earnedAdrs()).to.eventually.equal(
-					process.env.PANCAKE_CAKE
-				);
-				await expect(contract.govAdrs()).to.eventually.equal(
-					timelock.address
-				);
-				await expect(contract.rewardsAdrs()).to.eventually.equal(
-					deployer.address
-				);
+				expect(await contract.govAdrs()).to.equal(timelock.address);
+				expect(await contract.feeAdrs()).to.equal(deployer.address);
 
 				if (strategy.isHYPRComp) {
-					await expect(contract.farmAdrs()).to.eventually.equal(
-						process.env.PANCAKE_FARM
+					expect(await contract.farmAdrs()).to.equal(
+						process.env.ADRS_FARM
 					);
-					await expect(contract.routerAdrs()).to.eventually.equal(
-						process.env.PANCAKE_ROUTER
+					expect(await contract.routerAdrs()).to.equal(
+						process.env.ADRS_ROUTER
 					);
-					await expect(contract.wbnbPairAdrs()).to.eventually.equal(
+					expect(await contract.wbnbPairAdrs()).to.equal(
 						PAIRS["HYPR-WBNB"].address
 					);
 				} else {
-					await expect(contract.farmAdrs()).to.eventually.equal(
+					expect(await contract.farmAdrs()).to.equal(
 						constants.AddressZero
 					);
-					await expect(contract.routerAdrs()).to.eventually.equal(
+					expect(await contract.routerAdrs()).to.equal(
 						constants.AddressZero
 					);
-					await expect(contract.wbnbPairAdrs()).to.eventually.equal(
+					expect(await contract.wbnbPairAdrs()).to.equal(
 						constants.AddressZero
 					);
 				}
 
-				await expect(contract.owner()).to.eventually.equal(
-					master.address
-				);
+				expect(await contract.owner()).to.equal(master.address);
 			}
 		});
 
 		it("should have correct pid", async () => {
 			// Arrange
-			const farmKeys: (keyof typeof FARMS)[] = Object.keys(FARMS);
+			const strategies = STRATEGIES.filter(
+				strategy => strategy.type === "farm"
+			);
 
 			// Assert
-			for (let i = 0, n = farmKeys.length; i < n; i++) {
-				const strategy = STRATEGIES[i];
-				const farm = FARMS[farmKeys[i]];
+			for (let i = 0, n = strategies.length; i < n; i++) {
+				const strategy = strategies[i];
+				const farm = FARMS[strategy.symbol];
 				const contract = (await ethers.getContractAt(
 					NAME_FARM,
 					farm.address
 				)) as FarmCommander;
 
 				if (strategy.isHYPRComp) {
-					await expect(contract.pid()).to.eventually.equal(
-						strategy.pid
-					);
+					expect(await contract.pid()).to.equal(strategy.pid);
 				} else {
-					await expect(contract.pid()).to.eventually.equal(0);
+					expect(await contract.pid()).to.equal(0);
 				}
 			}
 		});
 
 		it("should have correct owner", async () => {
 			// Arrange
-			const farmKeys: (keyof typeof FARMS)[] = Object.keys(FARMS);
+			const strategies = STRATEGIES.filter(
+				strategy => strategy.type === "farm"
+			);
 
 			// Assert
-			for (let i = 0, n = farmKeys.length; i < n; i++) {
-				const farm = FARMS[farmKeys[i]];
+			for (let i = 0, n = strategies.length; i < n; i++) {
+				const strategy = strategies[i];
+				const farm = FARMS[strategy.symbol];
 				const contract = (await ethers.getContractAt(
 					NAME_FARM,
 					farm.address
 				)) as FarmCommander;
 
-				await expect(contract.owner()).to.eventually.equal(
-					master.address
-				);
+				expect(await contract.owner()).to.equal(master.address);
 			}
 		});
 
 		it("should have correct pool info", async () => {
 			// Arrange
-			const farmKeys: (keyof typeof FARMS)[] = Object.keys(FARMS);
+			const strategies = STRATEGIES.filter(
+				strategy => strategy.type === "farm"
+			);
 
 			// Assert
-			for (let i = 0, n = farmKeys.length; i < n; i++) {
-				const strategy = STRATEGIES[i];
+			for (let i = 0, n = strategies.length; i < n; i++) {
+				const strategy = strategies[i];
 				const pair = PAIRS[strategy.symbol];
-				const farm = FARMS[farmKeys[i]];
+				const farm = FARMS[strategy.symbol];
 
 				await master.poolInfo(farm.pid).then(poolInfo => {
 					expect(poolInfo.want).to.equal(
@@ -243,33 +231,41 @@ describe("Deployments", () => {
 					expect(poolInfo.strategy).to.equal(farm.address);
 					expect(poolInfo.allocPoint).to.equal(strategy.weight);
 					expect(poolInfo.accHYPRPerShare).to.equal(0);
+					expect(poolInfo.harvestInterval).to.equal(
+						strategy.harvestInterval
+					);
 					expect(poolInfo.depositFeeBP).to.equal(strategy.fee ?? 0);
-					expect(poolInfo.isComp).to.equal(strategy.isComp);
 				});
 			}
 		});
 
 		it("should have correct bools", async () => {
 			// Arrange
-			const farmKeys: (keyof typeof FARMS)[] = Object.keys(FARMS);
+			const strategies = STRATEGIES.filter(
+				strategy => strategy.type === "farm"
+			);
 
 			// Assert
-			for (let i = 0, n = farmKeys.length; i < n; i++) {
-				const strategy = STRATEGIES[i];
-				const farm = FARMS[farmKeys[i]];
+			for (let i = 0, n = strategies.length; i < n; i++) {
+				const strategy = strategies[i];
+				const farm = FARMS[strategy.symbol];
 				const contract = (await ethers.getContractAt(
 					NAME_FARM,
 					farm.address
 				)) as FarmCommander;
 
-				await expect(contract.onlyGov()).to.eventually.equal(false);
-				await expect(contract.isCAKEStaking()).to.eventually.equal(
+				expect(await contract.onlyGov()).to.equal(false);
+				expect(await contract.isCAKEStaking()).to.equal(
 					strategy.isCAKEStaking
 				);
-				await expect(contract.isHYPRComp()).to.eventually.equal(
+				expect(await contract.isHYPRComp()).to.equal(
 					strategy.isHYPRComp
 				);
 			}
 		});
+	});
+
+	after(async () => {
+		await revertToSnapShot(snapshotId);
 	});
 });

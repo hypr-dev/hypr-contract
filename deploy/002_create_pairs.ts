@@ -5,10 +5,9 @@ import { DeployFunction } from "hardhat-deploy/types";
 import { DEFAULT_FILENAME_PAIRS, NAME_TOKEN, STRATEGIES } from "../constants";
 import { getRemoteContract } from "../utils/network";
 import { getPairAddress } from "../utils/parser";
-import { AddressJson } from "../types";
 
 const strategies = STRATEGIES.filter(
-	strategy => !strategy.isHYPRComp && !strategy.isComp
+	strategy => !strategy.isHYPRComp && strategy.type === "farm"
 );
 const func: DeployFunction = async () => {
 	const PAIRS = JSON.parse(
@@ -19,10 +18,10 @@ const func: DeployFunction = async () => {
 	) as AddressJson;
 	const factory = await getRemoteContract<{
 		createPair: (t1: string, t2: string) => Promise<ContractTransaction>;
-	}>(process.env.PANCAKE_FACTORY);
+	}>(process.env.ADRS_FACTORY);
 	const hypr = await deployments.get(NAME_TOKEN);
 
-	if (!factory) throw new Error("PancakeFactory missing");
+	if (!factory) throw new Error("Factory missing");
 
 	for (let i = 0, n = strategies.length; i < n; i++) {
 		const strategy = strategies[i];

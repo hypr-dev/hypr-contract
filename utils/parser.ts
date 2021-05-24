@@ -1,5 +1,6 @@
-import { BigNumber, ContractReceipt } from "ethers";
-import { ethers } from "hardhat";
+import { ethers, BigNumber, ContractReceipt } from "ethers";
+
+export const parseEther = ethers.utils.parseEther;
 
 export const getPairAddress = (rc: ContractReceipt): string => {
 	if (!rc.events) return "";
@@ -16,6 +17,6 @@ export const getPairAddress = (rc: ContractReceipt): string => {
 export const getWeight = (
 	multiply: number,
 	baseETH: string | number = 1
-): BigNumber => ethers.utils.parseEther(baseETH.toString()).mul(multiply);
+): BigNumber => parseEther(baseETH.toString()).mul(multiply);
 
 export const parseBigNumber = (bn: BigNumber): string => bn.toString();

@@ -1,5 +1,5 @@
 import fs from "fs";
-import { constants, ContractTransaction } from "ethers";
+import { constants } from "ethers";
 import { deployments, ethers, getNamedAccounts } from "hardhat";
 import { DeployFunction } from "hardhat-deploy/types";
 import { SpaceMaster } from "../build/types";
@@ -11,8 +11,7 @@ import {
 	NAME_TOKEN,
 	STRATEGIES
 } from "../constants";
-import { AddressJson, EthersGetContract } from "../types";
-import { getRemoteContract, wait } from "../utils/network";
+import { wait } from "../utils/network";
 
 const name = "FarmCommander";
 const func: DeployFunction = async () => {
@@ -29,19 +28,15 @@ const func: DeployFunction = async () => {
 			"utf8"
 		)
 	) as AddressJson;
-	const factory = await getRemoteContract<{
-		createPair: (t1: string, t2: string) => Promise<ContractTransaction>;
-	}>(process.env.PANCAKE_FACTORY);
+	const strategies = STRATEGIES.filter(strategy => strategy.type === "farm");
 	const hypr = await deployments.get(NAME_TOKEN);
 	const master = await (ethers as EthersGetContract<SpaceMaster>).getContract(
 		NAME_MASTER
 	);
 	const timelock = await deployments.get(NAME_TIMELOCK);
 
-	if (!factory) throw new Error("PancakeFactory missing.");
-
-	for (let i = 0, n = STRATEGIES.length; i < n; i++) {
-		const strategy = STRATEGIES[i];
+	for (let i = 0, n = strategies.length; i < n; i++) {
+		const strategy = strategies[i];
 
 		if (FARMS[strategy.symbol]) continue;
 
@@ -49,22 +44,22 @@ const func: DeployFunction = async () => {
 		const addresses = [
 			hypr.address,
 			strategy.isHYPRComp ? strategy.address : pair.address,
-			process.env.WBNB ?? constants.AddressZero,
+			process.env.ADRS_WBNB ?? constants.AddressZero,
 			master.address
 		];
 
 		if (strategy.isHYPRComp) {
 			addresses.push(
-				process.env.PANCAKE_FARM ?? constants.AddressZero,
-				process.env.PANCAKE_ROUTER ?? constants.AddressZero,
-				process.env.PANCAKE_CAKE ?? constants.AddressZero,
+				process.env.ADRS_FARM ?? constants.AddressZero,
+				process.env.ADRS_ROUTER ?? constants.AddressZero,
+				process.env.ADRS_CAKE ?? constants.AddressZero,
 				timelock.address,
 				deployer,
 				PAIRS["HYPR-WBNB"].address
 			);
 		} else {
 			addresses.push(
-				process.env.PANCAKE_CAKE ?? constants.AddressZero,
+				process.env.ADRS_CAKE ?? constants.AddressZero,
 				timelock.address,
 				deployer
 			);
@@ -86,8 +81,8 @@ const func: DeployFunction = async () => {
 				strategy.isHYPRComp ? strategy.address : pair.address,
 				farm.address,
 				strategy.weight,
+				strategy.harvestInterval,
 				strategy.fee ?? 0,
-				strategy.isComp,
 				true
 			)
 			.then(wait);
@@ -97,20 +92,13 @@ const func: DeployFunction = async () => {
 			address: farm.address
 		};
 
-		console.log(
-			`Farm added between ${strategy.symbol} at ${
-				strategy.isHYPRComp ? strategy.address : pair.address
-			}`
-		);
+		console.log(`Farm added between ${strategy.symbol} at ${farm.address}`);
 	}
 
 	fs.writeFileSync(
 		`./dist/${process.env.FILENAME_FARMS ?? DEFAULT_FILENAME_FARMS}`,
 		JSON.stringify(FARMS)
 	);
-
-	if ((await master.owner()) === deployer)
-		await master.transferOwnership(timelock.address).then(wait);
 };
 
 export { name };

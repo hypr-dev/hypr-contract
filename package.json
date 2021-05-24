@@ -5,6 +5,11 @@
 	"scripts": {
 		"start": "npm run clean && npm run build && ttab -a Terminal -g npx env-cmd -f .env.local cross-env-shell 'npx hardhat node'",
 		"test": "env-cmd -f .env.local cross-env-shell 'hardhat test --deploy-fixture --network localhost'",
+		"test:deployments": "env-cmd -f .env.local cross-env-shell 'hardhat test --deploy-fixture --network localhost \"./test/Deployments.spec.ts\"'",
+		"test:hypertoken": "env-cmd -f .env.local cross-env-shell 'hardhat test --deploy-fixture --network localhost \"./test/HyperToken.spec.ts\"'",
+		"test:spacemaster": "env-cmd -f .env.local cross-env-shell 'hardhat test --deploy-fixture --network localhost \"./test/SpaceMaster.spec.ts\"'",
+		"test:strategycaptain": "env-cmd -f .env.local cross-env-shell 'hardhat test --deploy-fixture --network localhost \"./test/StrategyCaptain.spec.ts\"'",
+		"test:farmcommander": "env-cmd -f .env.local cross-env-shell 'hardhat test --deploy-fixture --network localhost \"./test/FarmCommander.spec.ts\"'",
 		"build": "env-cmd -f .env.local cross-env-shell 'hardhat compile'",
 		"clean": "env-cmd -f .env.local cross-env-shell 'hardhat clean && rimraf dist/*.localhost.json' && hardhat run scripts/jsons.ts",
 		"deploy": "env-cmd -f .env.local cross-env-shell 'hardhat deploy --network localhost'",

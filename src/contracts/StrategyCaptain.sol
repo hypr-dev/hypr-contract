@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.7.6;
+pragma solidity >=0.6.0 <0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
-import "../libs/SafeBEP20.sol";
-import "../libs/interfaces/IPancakeFarm.sol";
+import "../libs/interfaces/IFarm.sol";
 import "../libs/interfaces/IWBNB.sol";
+import "../libs/SafeBEP20.sol";
 
 abstract contract StrategyCaptain is Ownable, ReentrancyGuard, Pausable {
 	using SafeMath for uint256;
@@ -29,7 +29,7 @@ abstract contract StrategyCaptain is Ownable, ReentrancyGuard, Pausable {
 	address public routerAdrs; // uniswap, pancakeswap etc
 	address public govAdrs; // timelock contract
 	address public earnedAdrs;
-	address public rewardsAdrs;
+	address public feeAdrs;
 	address public buyBackAdrs = 0x000000000000000000000000000000000000dEaD;
 
 	uint256 public pid; // pid of pool in farmAdrs
@@ -42,7 +42,7 @@ abstract contract StrategyCaptain is Ownable, ReentrancyGuard, Pausable {
 	event SetOnlyGov(bool onlyGov);
 	event SetRouterAddress(address routerAdrs);
 	event SetWbnbAddress(address wbnbAdrs);
-	event SetRewardsAddress(address rewardsAdrs);
+	event SetFeeAddress(address feeAdrs);
 	event SetBuyBackAddress(address buyBackAdrs);
 
 	modifier onlyAllowGov() {
@@ -62,8 +62,22 @@ abstract contract StrategyCaptain is Ownable, ReentrancyGuard, Pausable {
 		_wrapBNB();
 	}
 
+	function inCaseTokensGetStuck(
+		address token,
+		address to,
+		uint256 amount
+	) public virtual onlyAllowGov {
+		require(address(token) != earnedAdrs, "StrategyCaptain: !safe");
+		require(address(token) != wantAdrs, "StrategyCaptain: !safe");
+
+		IBEP20(token).safeTransfer(to, amount);
+	}
+
 	function setSettings(uint256 _controllerFee) public virtual onlyAllowGov {
-		require(_controllerFee <= CONTROLLER_FEE_UL, "_controllerFee too high");
+		require(
+			_controllerFee <= CONTROLLER_FEE_UL,
+			"StrategyCaptain: controller fee too high"
+		);
 
 		controllerFee = _controllerFee;
 
@@ -94,14 +108,10 @@ abstract contract StrategyCaptain is Ownable, ReentrancyGuard, Pausable {
 		emit SetWbnbAddress(_wbnbAdrs);
 	}
 
-	function setRewardsAddress(address _rewardsAdrs)
-		public
-		virtual
-		onlyAllowGov
-	{
-		rewardsAdrs = _rewardsAdrs;
+	function setFeeAddress(address _feeAdrs) public virtual onlyAllowGov {
+		feeAdrs = _feeAdrs;
 
-		emit SetRewardsAddress(_rewardsAdrs);
+		emit SetFeeAddress(_feeAdrs);
 	}
 
 	function setBuyBackAddress(address _buyBackAdrs)
@@ -112,17 +122,6 @@ abstract contract StrategyCaptain is Ownable, ReentrancyGuard, Pausable {
 		buyBackAdrs = _buyBackAdrs;
 
 		emit SetBuyBackAddress(_buyBackAdrs);
-	}
-
-	function inCaseTokensGetStuck(
-		address token,
-		address to,
-		uint256 amount
-	) public virtual onlyAllowGov {
-		require(address(token) != earnedAdrs, "StrategyCaptain: !safe");
-		require(address(token) != wantAdrs, "StrategyCaptain: !safe");
-
-		IBEP20(token).safeTransfer(to, amount);
 	}
 
 	function _wrapBNB() internal virtual {
@@ -144,7 +143,7 @@ abstract contract StrategyCaptain is Ownable, ReentrancyGuard, Pausable {
 			if (controllerFee > 0) {
 				uint256 fee =
 					earnedAmt.mul(controllerFee).div(CONTROLLER_FEE_MAX);
-				IBEP20(earnedAdrs).safeTransfer(rewardsAdrs, fee);
+				IBEP20(earnedAdrs).safeTransfer(feeAdrs, fee);
 				earnedAmt = earnedAmt.sub(fee);
 			}
 		}
@@ -156,14 +155,15 @@ abstract contract StrategyCaptain is Ownable, ReentrancyGuard, Pausable {
 		require(isHYPRComp, "StrategyCaptain: must be HYPR compound");
 
 		uint256 wantAmt = IBEP20(wantAdrs).balanceOf(address(this));
+
 		totalWantLocked = totalWantLocked.add(wantAmt);
 
 		IBEP20(wantAdrs).safeIncreaseAllowance(farmAdrs, wantAmt);
 
 		if (isCAKEStaking) {
-			IPancakeFarm(farmAdrs).enterStaking(wantAmt); // Just for CAKE staking, we dont use deposit()
+			IFarm(farmAdrs).enterStaking(wantAmt); // Just for CAKE staking, we dont use deposit()
 		} else {
-			IPancakeFarm(farmAdrs).deposit(pid, wantAmt);
+			IFarm(farmAdrs).deposit(pid, wantAmt);
 		}
 	}
 }

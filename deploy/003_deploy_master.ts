@@ -2,9 +2,8 @@ import fs from "fs";
 import { deployments, ethers, getNamedAccounts } from "hardhat";
 import { DeployFunction } from "hardhat-deploy/types";
 import { HyperToken, SpaceMaster } from "../build/types";
-import { AddressJson, EthersGetContract } from "../types";
-import { wait } from "../utils/network";
 import { DEFAULT_FILENAME_PAIRS, NAME_TOKEN } from "../constants";
+import { getBlockNumber, wait } from "../utils/network";
 
 const name = "SpaceMaster";
 const func: DeployFunction = async () => {
@@ -21,7 +20,7 @@ const func: DeployFunction = async () => {
 
 	if ((await hypr.owner()) !== deployer) return;
 
-	const startBlock = await ethers.provider.getBlockNumber();
+	const startBlock = await getBlockNumber();
 	const args = [
 		[
 			PAIRS["HYPR-WBNB"].address,

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.7.6;
+pragma solidity >=0.6.0 <0.8.0;
 
-interface IPancakeFarm {
+interface IFarm {
 	function poolLength() external view returns (uint256);
 
 	function userInfo() external view returns (uint256);
