@@ -10,6 +10,7 @@ interface ISpaceMaster {
 		address wantAdrs,
 		address strategyAdrs,
 		uint256 allocPoint,
+		uint256 harvestInterval,
 		uint16 depositFeeBP,
 		bool withUpdate
 	) external;
@@ -17,6 +18,7 @@ interface ISpaceMaster {
 	function set(
 		uint256 pid,
 		uint256 allocPoint,
+		uint256 harvestInterval,
 		uint16 depositFeeBP,
 		bool withUpdate
 	) external;

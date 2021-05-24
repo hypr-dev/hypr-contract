@@ -50,18 +50,6 @@ abstract contract StrategyCaptain is Ownable, ReentrancyGuard, Pausable {
 		_;
 	}
 
-	function pause() public virtual onlyAllowGov {
-		_pause();
-	}
-
-	function unpause() public virtual onlyAllowGov {
-		_unpause();
-	}
-
-	function wrapBNB() public virtual onlyAllowGov {
-		_wrapBNB();
-	}
-
 	function inCaseTokensGetStuck(
 		address token,
 		address to,
@@ -122,6 +110,18 @@ abstract contract StrategyCaptain is Ownable, ReentrancyGuard, Pausable {
 		buyBackAdrs = _buyBackAdrs;
 
 		emit SetBuyBackAddress(_buyBackAdrs);
+	}
+
+	function pause() public virtual onlyAllowGov {
+		_pause();
+	}
+
+	function unpause() public virtual onlyAllowGov {
+		_unpause();
+	}
+
+	function wrapBNB() public virtual onlyAllowGov {
+		_wrapBNB();
 	}
 
 	function _wrapBNB() internal virtual {

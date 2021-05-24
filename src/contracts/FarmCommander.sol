@@ -148,6 +148,10 @@ contract FarmCommander is StrategyCaptain {
 		lastEarnBlock = block.number;
 	}
 
+	function farm() public nonReentrant {
+		_farm();
+	}
+
 	function setWbnbAddress(address _wbnbAdrs) public override onlyAllowGov {
 		wbnbAdrs = _wbnbAdrs;
 

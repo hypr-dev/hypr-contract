@@ -13,18 +13,6 @@ interface IStrategy {
 
 	function farm() external;
 
-	function unlock() external;
-
-	function pause() external;
-
-	function unpause() external;
-
-	function rebalance(uint256 borrowRate, uint256 borrowDepth) external;
-
-	function deleverageOnce() external;
-
-	function wrapBNB() external; // Specifically for the Venus WBNB vault.
-
 	// Transfer want tokens spaceFarm -> strategy
 	function deposit(uint256 amount) external returns (uint256);
 
@@ -36,6 +24,18 @@ interface IStrategy {
 		address to,
 		uint256 amount
 	) external;
+
+	function unlock() external;
+
+	function pause() external;
+
+	function unpause() external;
+
+	function rebalance(uint256 borrowRate, uint256 borrowDepth) external;
+
+	function deleverageOnce() external;
+
+	function wrapBNB() external; // Specifically for the Venus WBNB vault.
 
 	// In case new vaults require functions without a timelock as well, hoping to avoid having multiple timelock contracts
 	function noTimeLockFunc1() external;
