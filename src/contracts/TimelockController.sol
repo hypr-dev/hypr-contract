@@ -445,6 +445,7 @@ contract TimelockController is AccessControl {
 		address masterAdrs,
 		uint256 pid,
 		uint256 allocPoint,
+		uint256 harvestInterval,
 		uint16 depositFeeBP,
 		bool withUpdate,
 		bytes32 predecessor,
@@ -464,7 +465,13 @@ contract TimelockController is AccessControl {
 			);
 
 		_beforeCall(predecessor);
-		ISpaceMaster(masterAdrs).set(pid, allocPoint, depositFeeBP, withUpdate);
+		ISpaceMaster(masterAdrs).set(
+			pid,
+			allocPoint,
+			harvestInterval,
+			depositFeeBP,
+			withUpdate
+		);
 		_aftBEPall(id);
 	}
 
@@ -496,6 +503,7 @@ contract TimelockController is AccessControl {
 		address masterAdrs,
 		address wantAdrs,
 		address strategyAdrs,
+		uint256 harvestInterval,
 		uint16 depositFeeBP,
 		bool withUpdate
 	) public onlyRole(EXECUTOR_ROLE) {
@@ -503,6 +511,7 @@ contract TimelockController is AccessControl {
 			wantAdrs,
 			strategyAdrs,
 			0,
+			harvestInterval,
 			depositFeeBP,
 			withUpdate
 		); // allocPoint = 0. Schedule set (timelocked) to increase allocPoint.

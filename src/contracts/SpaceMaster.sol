@@ -8,9 +8,8 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "../libs/SafeBEP20.sol";
 import "../libs/interfaces/IBEP20.sol";
 import "./interfaces/IStrategy.sol";
-import "./HyperToken.sol";
-import "./FarmCommander.sol";
-import "./CompCommander.sol";
+import "./interfaces/IHyperToken.sol";
+import "./interfaces/ICompCommander.sol";
 
 contract SpaceMaster is Ownable, ReentrancyGuard {
 	using SafeMath for uint256;
@@ -289,8 +288,8 @@ contract SpaceMaster is Ownable, ReentrancyGuard {
 				totalAllocPoint
 			);
 
-		HyperToken(hyprAdrs).mint(devWalletAdrs, hyprDevReward);
-		HyperToken(hyprAdrs).mint(address(this), hyprReward);
+		IHyperToken(hyprAdrs).mint(devWalletAdrs, hyprDevReward);
+		IHyperToken(hyprAdrs).mint(address(this), hyprReward);
 
 		pool.accHYPRPerShare = pool.accHYPRPerShare.add(
 			hyprReward.mul(1e12).div(totalWantLocked)
@@ -334,7 +333,7 @@ contract SpaceMaster is Ownable, ReentrancyGuard {
 		UserInfo storage user = userInfo[pid][userAdrs];
 
 		uint256 totalShares =
-			CompCommander(address(pool.strategy)).totalShares();
+			ICompCommander(address(pool.strategy)).totalShares();
 		uint256 totalWantLocked = pool.strategy.totalWantLocked();
 
 		if (totalShares == 0) {

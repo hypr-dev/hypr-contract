@@ -22,6 +22,7 @@ contract CompCommander is StrategyCaptain {
 	uint256 public constant SLIPPAGE_FACTOR_UL = 995;
 
 	bool public isSameAssetDeposit;
+	bool public isConverting = false;
 
 	address public depositFeeAdrs;
 	address public withdrawFeeAdrs;
@@ -45,7 +46,8 @@ contract CompCommander is StrategyCaptain {
 		uint256 entranceFeeFactor,
 		uint256 withdrawFeeFactor,
 		uint256 buyBackRate,
-		uint256 slippageFactor
+		uint256 slippageFactor,
+		bool isConverting
 	);
 
 	constructor(
@@ -326,7 +328,8 @@ contract CompCommander is StrategyCaptain {
 		uint256 _entranceFeeFactor,
 		uint256 _withdrawFeeFactor,
 		uint256 _buyBackRate,
-		uint256 _slippageFactor
+		uint256 _slippageFactor,
+		bool _isConverting
 	) public onlyAllowGov {
 		require(
 			_entranceFeeFactor >= ENTRANCE_FEE_FACTOR_LL,
@@ -366,12 +369,15 @@ contract CompCommander is StrategyCaptain {
 		);
 		slippageFactor = _slippageFactor;
 
+		isConverting = _isConverting;
+
 		emit SetSettings(
 			_controllerFee,
 			_entranceFeeFactor,
 			_withdrawFeeFactor,
 			_buyBackRate,
-			_slippageFactor
+			_slippageFactor,
+			_isConverting
 		);
 	}
 

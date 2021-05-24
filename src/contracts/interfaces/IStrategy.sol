@@ -2,8 +2,6 @@
 
 pragma solidity >=0.6.0 <0.8.0;
 
-import "../../libs/interfaces/IBEP20.sol";
-
 interface IStrategy {
 	// Total want tokens managed by strategy
 	function totalWantLocked() external view returns (uint256);
